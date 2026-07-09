@@ -1,0 +1,162 @@
+---
+title: "ANC Lab REST API: Overview and Quick Reference"
+sidebarTitle: "API Overview"
+description: "Explore the ANC Lab REST API — a unified interface for managing ontologies, knowledge graphs, SPARQL queries, and graph analytics at scale."
+---
+
+The ANC Lab REST API gives you programmatic access to every feature of the Knowledge Hub platform. Use it to create and manage ontologies, populate and query knowledge graphs, run SPARQL queries, and retrieve graph analytics — all over standard HTTPS using JSON payloads. Every API request targets a versioned base URL so your integrations remain stable as the platform evolves.
+
+## Base URL
+
+All API requests use the following base URL:
+
+```
+https://api.anclab.io/v1
+```
+
+## API Versioning
+
+The current stable version is **v1**. The version segment is part of the URL path, not a header, so you always know exactly which version your client is calling.
+
+<Note>
+  ANC Lab follows a 12-month deprecation policy. When a new major version ships, the previous version continues to receive bug fixes and security patches for at least 12 months. Watch the [changelog](https://docs.anclab.io/changelog) for advance notice of breaking changes.
+</Note>
+
+## Content Types
+
+| Scenario | Request `Content-Type` | Response `Content-Type` |
+|---|---|---|
+| Standard JSON operations | `application/json` | `application/json` |
+| Raw SPARQL query body | `application/sparql-query` | `application/json` |
+| RDF file import (Turtle) | `text/turtle` | `application/json` |
+| RDF file import (multipart) | `multipart/form-data` | `application/json` |
+
+Always set `Accept: application/json` unless you are requesting a specific RDF serialisation from an export endpoint.
+
+## Authentication
+
+Every request must carry your API key in the `Authorization` header:
+
+```
+Authorization: Bearer anchub_sk_...
+```
+
+See the [Authentication](/api/authentication) page for full details on creating and managing API keys.
+
+## Rate Limits
+
+| Plan | Requests per minute |
+|---|---|
+| Free | 100 |
+| Starter | 500 |
+| Pro | 1 000 |
+| Enterprise | Custom |
+
+When you exceed the limit the API returns `429 Too Many Requests` with a `Retry-After` header indicating the number of seconds to wait before retrying.
+
+## Pagination
+
+List endpoints support cursor-free, offset-based pagination via two query parameters:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `page` | integer | `1` | The page number (1-indexed) |
+| `limit` | integer | `20` | Items per page (max `100`) |
+
+Every paginated response includes a `meta` object:
+
+```json
+{
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 143,
+    "total_pages": 8
+  }
+}
+```
+
+## Quick Navigation
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/api/authentication">
+    Create and manage API keys, understand scopes, and secure your credentials.
+  </Card>
+  <Card title="Ontologies API" icon="sitemap" href="/api/ontologies">
+    Create, update, validate, and export OWL and RDF ontologies.
+  </Card>
+  <Card title="Graphs API" icon="diagram-project" href="/api/graphs">
+    Manage knowledge graph datasets, import RDF data, and run inference.
+  </Card>
+  <Card title="Query API" icon="magnifying-glass" href="/api/query">
+    Execute SPARQL SELECT, CONSTRUCT, and UPDATE queries against your graphs.
+  </Card>
+  <Card title="Analytics API" icon="chart-bar" href="/api/analytics">
+    Compute graph metrics, detect clusters, and schedule analytics reports.
+  </Card>
+</CardGroup>
+
+## Endpoint Quick Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/ontologies` | List all ontologies |
+| `POST` | `/ontologies` | Create a new ontology |
+| `GET` | `/ontologies/{id}` | Get an ontology by ID |
+| `PUT` | `/ontologies/{id}` | Update an ontology |
+| `DELETE` | `/ontologies/{id}` | Delete an ontology |
+| `GET` | `/ontologies/{id}/export` | Export ontology in a given format |
+| `POST` | `/ontologies/{id}/validate` | Validate an ontology |
+| `GET` | `/graphs` | List all knowledge graphs |
+| `POST` | `/graphs` | Create a knowledge graph |
+| `GET` | `/graphs/{id}` | Get a graph by ID |
+| `DELETE` | `/graphs/{id}` | Delete a graph |
+| `POST` | `/graphs/{id}/triples` | Add triples to a graph |
+| `DELETE` | `/graphs/{id}/triples` | Remove triples from a graph |
+| `POST` | `/graphs/{id}/import` | Bulk-import RDF data |
+| `GET` | `/graphs/{id}/export` | Export graph data |
+| `GET` | `/graphs/{id}/stats` | Get graph statistics |
+| `POST` | `/graphs/{id}/infer` | Trigger inference on a graph |
+| `POST` | `/query` | Execute a SPARQL query |
+| `POST` | `/query/explain` | Explain a query execution plan |
+| `GET` | `/query/history` | List recent query executions |
+| `GET` | `/analytics` | Run graph analytics |
+| `POST` | `/analytics/query` | Run a custom analytics SPARQL query |
+| `GET` | `/analytics/reports` | List saved analytics reports |
+| `POST` | `/analytics/reports` | Create a saved analytics report |
+| `GET` | `/analytics/reports/{id}/run` | Execute a saved report |
+| `POST` | `/auth/keys` | Create an API key |
+| `GET` | `/auth/keys` | List API keys |
+| `DELETE` | `/auth/keys/{key_id}` | Revoke an API key |
+
+## Error Codes
+
+The API uses standard HTTP status codes. All error responses share a consistent JSON structure:
+
+```json
+{
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "The field 'namespace_uri' must be a valid absolute IRI.",
+    "details": {
+      "field": "namespace_uri",
+      "provided": "not-an-iri"
+    }
+  }
+}
+```
+
+| Status | Meaning | Common cause |
+|---|---|---|
+| `400 Bad Request` | Invalid input | Missing required field, malformed JSON, or constraint violation |
+| `401 Unauthorized` | Missing or invalid API key | No `Authorization` header or an expired/revoked key |
+| `403 Forbidden` | Insufficient permissions | Key scope does not allow the requested operation |
+| `404 Not Found` | Resource does not exist | Wrong ID, or the resource was deleted |
+| `409 Conflict` | State conflict | Duplicate namespace prefix, or concurrent modification |
+| `422 Unprocessable Entity` | Semantic validation error | Ontology parse failure, SPARQL syntax error |
+| `429 Too Many Requests` | Rate limit exceeded | See `Retry-After` header for backoff duration |
+| `500 Internal Server Error` | Platform error | Unexpected server-side failure; contact support with the `request_id` |
+
+<Tip>
+  Every response — including errors — includes an `X-Request-Id` header. Quote this value when opening a support ticket so ANC Lab engineers can trace the exact request in internal logs.
+</Tip>

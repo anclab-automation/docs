@@ -1,0 +1,433 @@
+---
+title: "Ontologies API: Create, Read, Update, Delete"
+sidebarTitle: "Ontologies"
+description: "Manage OWL and RDF ontologies in ANC Lab — create, retrieve, update, validate, export, and delete ontologies through the REST API."
+---
+
+The Ontologies API is your gateway to managing the semantic schemas that underpin your knowledge graphs. Use it to upload existing ontologies in Turtle, OWL/XML, or JSON-LD format, create new ones inline, validate them against OWL and SHACL rules, and export them to any supported serialisation. Every ontology you publish here becomes available for linking to one or more knowledge graphs.
+
+---
+
+## Ontology Object Schema
+
+Every successful response that returns an ontology includes the following fields:
+
+<ResponseField name="id" type="string">
+  Unique identifier for the ontology. Use this ID when linking to graphs or calling sub-resource endpoints.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Human-readable display name of the ontology.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Optional free-text description of the ontology's purpose and coverage.
+</ResponseField>
+
+<ResponseField name="namespace_prefix" type="string">
+  The short prefix used in SPARQL queries and Turtle serialisations — for example, `schema`, `foaf`, or `ex`.
+</ResponseField>
+
+<ResponseField name="namespace_uri" type="string">
+  The full IRI namespace that the prefix expands to — for example, `https://schema.org/`.
+</ResponseField>
+
+<ResponseField name="format" type="string">
+  The primary serialisation format: `turtle`, `owl`, or `jsonld`.
+</ResponseField>
+
+<ResponseField name="classes_count" type="integer">
+  Number of `owl:Class` or `rdfs:Class` declarations in the ontology.
+</ResponseField>
+
+<ResponseField name="properties_count" type="integer">
+  Combined count of `owl:ObjectProperty`, `owl:DatatypeProperty`, and `rdf:Property` declarations.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the ontology was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the most recent update.
+</ResponseField>
+
+---
+
+## List Ontologies
+
+```
+GET /ontologies
+```
+
+Returns a paginated list of all ontologies in your workspace.
+
+### Query Parameters
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Number of results per page. Defaults to `20`, maximum `100`.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Free-text search across ontology `name`, `description`, and `namespace_prefix` fields.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/ontologies?page=1&limit=10&search=schema" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "ont_01HB3KQPZ7WVXN2MDTFY6REAJ",
+      "name": "Schema.org Subset",
+      "description": "A curated subset of schema.org for product and event modelling.",
+      "namespace_prefix": "schema",
+      "namespace_uri": "https://schema.org/",
+      "format": "turtle",
+      "classes_count": 84,
+      "properties_count": 312,
+      "created_at": "2025-01-15T10:00:00Z",
+      "updated_at": "2025-03-20T14:22:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+---
+
+## Create an Ontology
+
+```
+POST /ontologies
+```
+
+Creates a new ontology record. Supply the ontology content inline in the `content` field or upload a file via a separate import workflow.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  A short, descriptive display name. Example: `"FOAF Ontology"`.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional prose description of the ontology's domain and purpose.
+</ParamField>
+
+<ParamField body="namespace_prefix" type="string" required>
+  The preferred short prefix. Must be unique within your workspace and match the pattern `[a-z][a-z0-9_-]*`. Example: `"foaf"`.
+</ParamField>
+
+<ParamField body="namespace_uri" type="string" required>
+  The absolute IRI that the prefix expands to. Must end with `/` or `#`. Example: `"http://xmlns.com/foaf/0.1/"`.
+</ParamField>
+
+<ParamField body="format" type="string">
+  Serialisation format of the supplied `content`. Accepted values: `turtle` (default), `owl`, `jsonld`.
+</ParamField>
+
+<ParamField body="content" type="string">
+  The raw ontology document as a string. Include this for inline creation; omit it to create an empty ontology shell that you can populate later.
+</ParamField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/ontologies \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "FOAF Ontology",
+    "description": "Friend of a Friend vocabulary for describing people and relationships.",
+    "namespace_prefix": "foaf",
+    "namespace_uri": "http://xmlns.com/foaf/0.1/",
+    "format": "turtle",
+    "content": "@prefix foaf: <http://xmlns.com/foaf/0.1/> .\n@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\nfoaf:Person a owl:Class ."
+  }'
+```
+
+```python Python
+import os, requests
+
+payload = {
+    "name": "FOAF Ontology",
+    "description": "Friend of a Friend vocabulary.",
+    "namespace_prefix": "foaf",
+    "namespace_uri": "http://xmlns.com/foaf/0.1/",
+    "format": "turtle",
+    "content": "@prefix foaf: <http://xmlns.com/foaf/0.1/> .\nfoaf:Person a <http://www.w3.org/2002/07/owl#Class> .",
+}
+
+resp = requests.post(
+    "https://api.anclab.io/v1/ontologies",
+    json=payload,
+    headers={"Authorization": f"Bearer {os.environ['ANCHUB_API_KEY']}"},
+)
+resp.raise_for_status()
+print(resp.json()["data"]["id"])
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "data": {
+    "id": "ont_02KC4LRQA8XWYO3NEUGZ7SFBH",
+    "name": "FOAF Ontology",
+    "description": "Friend of a Friend vocabulary for describing people and relationships.",
+    "namespace_prefix": "foaf",
+    "namespace_uri": "http://xmlns.com/foaf/0.1/",
+    "format": "turtle",
+    "classes_count": 1,
+    "properties_count": 0,
+    "created_at": "2025-04-10T09:00:00Z",
+    "updated_at": "2025-04-10T09:00:00Z"
+  }
+}
+```
+
+---
+
+## Get an Ontology
+
+```
+GET /ontologies/{id}
+```
+
+Retrieves the full metadata record for a single ontology.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique ontology ID returned when the ontology was created.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl https://api.anclab.io/v1/ontologies/ont_02KC4LRQA8XWYO3NEUGZ7SFBH \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "id": "ont_02KC4LRQA8XWYO3NEUGZ7SFBH",
+    "name": "FOAF Ontology",
+    "description": "Friend of a Friend vocabulary for describing people and relationships.",
+    "namespace_prefix": "foaf",
+    "namespace_uri": "http://xmlns.com/foaf/0.1/",
+    "format": "turtle",
+    "classes_count": 14,
+    "properties_count": 67,
+    "created_at": "2025-04-10T09:00:00Z",
+    "updated_at": "2025-04-12T11:30:00Z"
+  }
+}
+```
+
+---
+
+## Update an Ontology
+
+```
+PUT /ontologies/{id}
+```
+
+Replaces the updatable fields of an ontology. Send only the fields you want to change; omitted fields retain their current values.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique ontology ID.
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string">
+  Updated display name.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Updated description.
+</ParamField>
+
+<ParamField body="content" type="string">
+  Replacement ontology document. The platform re-parses this content and updates `classes_count` and `properties_count` accordingly.
+</ParamField>
+
+<ParamField body="format" type="string">
+  Serialisation format of the new `content`. Required if `content` is provided. Accepted values: `turtle`, `owl`, `jsonld`.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X PUT https://api.anclab.io/v1/ontologies/ont_02KC4LRQA8XWYO3NEUGZ7SFBH \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Updated FOAF vocabulary — includes social network extensions."
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "id": "ont_02KC4LRQA8XWYO3NEUGZ7SFBH",
+    "name": "FOAF Ontology",
+    "description": "Updated FOAF vocabulary — includes social network extensions.",
+    "namespace_prefix": "foaf",
+    "namespace_uri": "http://xmlns.com/foaf/0.1/",
+    "format": "turtle",
+    "classes_count": 14,
+    "properties_count": 67,
+    "created_at": "2025-04-10T09:00:00Z",
+    "updated_at": "2025-04-15T08:45:00Z"
+  }
+}
+```
+
+---
+
+## Delete an Ontology
+
+```
+DELETE /ontologies/{id}
+```
+
+Permanently removes an ontology. Any knowledge graphs that reference this ontology will lose their `ontology_id` association but will not be deleted.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique ontology ID to delete.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X DELETE https://api.anclab.io/v1/ontologies/ont_02KC4LRQA8XWYO3NEUGZ7SFBH \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "id": "ont_02KC4LRQA8XWYO3NEUGZ7SFBH",
+    "deleted": true,
+    "deleted_at": "2025-04-15T09:00:00Z"
+  }
+}
+```
+
+---
+
+## Export an Ontology
+
+```
+GET /ontologies/{id}/export
+```
+
+Downloads the full ontology document in your chosen serialisation format.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique ontology ID to export.
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="format" type="string">
+  Target serialisation format. Accepted values: `turtle` (default), `owl`, `jsonld`, `rdf-xml`.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/ontologies/ont_02KC4LRQA8XWYO3NEUGZ7SFBH/export?format=jsonld" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -o foaf-ontology.jsonld
+```
+
+The response body is the raw ontology document (not a JSON envelope), with `Content-Type` set to the appropriate media type for the requested format.
+
+---
+
+## Validate an Ontology
+
+```
+POST /ontologies/{id}/validate
+```
+
+Runs consistency and constraint checks on the ontology. Checks include OWL DL consistency, SHACL shape conformance, and IRI resolution.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique ontology ID to validate.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/ontologies/ont_02KC4LRQA8XWYO3NEUGZ7SFBH/validate \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "ontology_id": "ont_02KC4LRQA8XWYO3NEUGZ7SFBH",
+    "valid": false,
+    "violations": [
+      {
+        "severity": "warning",
+        "code": "MISSING_LABEL",
+        "message": "Class 'foaf:OnlineAccount' has no rdfs:label annotation.",
+        "location": "line 42"
+      },
+      {
+        "severity": "error",
+        "code": "UNRESOLVED_IRI",
+        "message": "Property range 'foaf:Document' references a class not defined in this ontology or any imported ontology.",
+        "location": "line 88"
+      }
+    ],
+    "checked_at": "2025-04-15T09:05:00Z"
+  }
+}
+```
+
+<Note>
+  A `valid: false` result with only `warning`-severity violations will not block the ontology from being used in a knowledge graph. Only `error`-severity violations prevent graph association.
+</Note>

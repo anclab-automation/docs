@@ -1,0 +1,498 @@
+---
+title: "Query Your Knowledge Graph with SPARQL"
+sidebarTitle: "Semantic Querying"
+description: "Write and execute SPARQL SELECT, CONSTRUCT, ASK, and DESCRIBE queries against your ANC Lab Knowledge Hub graph using the REST query endpoint."
+---
+
+SPARQL (SPARQL Protocol and RDF Query Language) is the standard query language for RDF knowledge graphs. It lets you retrieve specific facts, traverse relationships, aggregate statistics, and reconstruct subgraphs — all in a single expressive query. This guide covers the four SPARQL query forms and shows you how to execute each one against your knowledge graph using the ANC Lab Knowledge Hub query API.
+
+<Note>
+The query endpoint returns results in multiple formats. Set the `Accept` header to control the output:
+- **SELECT / ASK** → `application/sparql-results+json` (default), `text/csv`, `application/sparql-results+xml`
+- **CONSTRUCT / DESCRIBE** → `text/turtle` (default), `application/ld+json`, `application/rdf+xml`
+
+Pass `?format=csv` as a query parameter if you prefer not to set headers explicitly.
+</Note>
+
+## Executing a Query
+
+All SPARQL queries go to the same endpoint: `POST /graphs/{graphId}/query`. Send the query as a plain string in the request body with `Content-Type: application/sparql-query`, or wrap it in JSON.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  -H "Accept: application/sparql-results+json" \
+  --data-raw 'SELECT ?product ?name WHERE {
+    ?product a <https://ontologies.anclab.io/ecommerce/v1#Product> ;
+             <https://ontologies.anclab.io/ecommerce/v1#hasName> ?name .
+  } LIMIT 10'
+```
+
+```python Python
+import requests
+
+BASE_URL = "https://api.anclab.io/v1"
+GRAPH_ID  = "grph_3mNpQrStuv"
+
+def sparql_query(query: str, accept: str = "application/sparql-results+json") -> dict:
+    r = requests.post(
+        f"{BASE_URL}/graphs/{GRAPH_ID}/query",
+        data=query,
+        headers={
+            "Authorization": "Bearer anchub_sk_...",
+            "Content-Type": "application/sparql-query",
+            "Accept": accept,
+        },
+    )
+    r.raise_for_status()
+    return r.json()
+```
+
+</CodeGroup>
+
+## SPARQL Query Forms
+
+### SELECT — Retrieve Specific Variables
+
+`SELECT` returns a table of bound variable values, just like a SQL `SELECT`. Use it whenever you need a list of entities or property values.
+
+**Query: list every product with its name and price**
+
+```sparql
+PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?product ?name ?price
+WHERE {
+  ?product a ec:Product ;
+           ec:hasName  ?name ;
+           ec:hasPrice ?price .
+}
+ORDER BY ASC(?price)
+```
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  -H "Accept: application/sparql-results+json" \
+  --data-raw 'PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?product ?name ?price
+WHERE {
+  ?product a ec:Product ;
+           ec:hasName  ?name ;
+           ec:hasPrice ?price .
+}
+ORDER BY ASC(?price)'
+```
+
+```python Python
+query = """
+PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?product ?name ?price
+WHERE {
+  ?product a ec:Product ;
+           ec:hasName  ?name ;
+           ec:hasPrice ?price .
+}
+ORDER BY ASC(?price)
+"""
+
+result = sparql_query(query)
+for row in result["results"]["bindings"]:
+    print(f"{row['name']['value']:30s}  £{row['price']['value']}")
+```
+
+</CodeGroup>
+
+**Response (SPARQL JSON format):**
+
+```json
+{
+  "head": { "vars": ["product", "name", "price"] },
+  "results": {
+    "bindings": [
+      {
+        "product": { "type": "uri",     "value": "https://data.anclab.io/ecommerce/product/usb-c-hub-h7" },
+        "name":    { "type": "literal", "value": "USB-C Hub H7" },
+        "price":   { "type": "literal", "value": "49.99", "datatype": "http://www.w3.org/2001/XMLSchema#decimal" }
+      },
+      {
+        "product": { "type": "uri",     "value": "https://data.anclab.io/ecommerce/product/smart-speaker-s1" },
+        "name":    { "type": "literal", "value": "Smart Speaker S1" },
+        "price":   { "type": "literal", "value": "79.99", "datatype": "http://www.w3.org/2001/XMLSchema#decimal" }
+      }
+    ]
+  }
+}
+```
+
+### SELECT by Class Membership
+
+Filter entities by their `rdf:type` to retrieve all members of a particular class, including inferred subclass members when reasoning is enabled.
+
+**Query: list all suppliers and their contact emails**
+
+```sparql
+PREFIX ec:   <https://ontologies.anclab.io/ecommerce/v1#>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?supplier ?name ?email
+WHERE {
+  ?supplier rdf:type ec:Supplier ;
+            ec:hasName  ?name .
+  OPTIONAL { ?supplier ec:hasEmail ?email . }
+}
+ORDER BY ?name
+```
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  --data-raw 'PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?supplier ?name ?email
+WHERE {
+  ?supplier rdf:type ec:Supplier ;
+            ec:hasName ?name .
+  OPTIONAL { ?supplier ec:hasEmail ?email . }
+}
+ORDER BY ?name'
+```
+
+```python Python
+query = """
+PREFIX ec:  <https://ontologies.anclab.io/ecommerce/v1#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?supplier ?name ?email
+WHERE {
+  ?supplier rdf:type ec:Supplier ;
+            ec:hasName ?name .
+  OPTIONAL { ?supplier ec:hasEmail ?email . }
+}
+ORDER BY ?name
+"""
+
+result = sparql_query(query)
+for row in result["results"]["bindings"]:
+    email = row.get("email", {}).get("value", "—")
+    print(f"{row['name']['value']:25s}  {email}")
+```
+
+</CodeGroup>
+
+<Tip>
+When querying across multiple named graphs, use the `GRAPH` keyword to scope your pattern:
+
+```sparql
+SELECT ?product ?name
+WHERE {
+  GRAPH <https://data.anclab.io/ecommerce/imports/catalog-2024-q1> {
+    ?product a ec:Product ;
+             ec:hasName ?name .
+  }
+}
+```
+
+This lets you compare data across import batches or isolate results to a specific provenance source.
+</Tip>
+
+### Filtering and Aggregation (COUNT, GROUP BY)
+
+Use `FILTER`, `GROUP BY`, and aggregate functions to produce summary statistics over your graph data.
+
+**Query: count products per category, only show categories with more than two products**
+
+```sparql
+PREFIX ec:  <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?categoryName (COUNT(?product) AS ?productCount)
+WHERE {
+  ?product  a ec:Product ;
+            ec:belongsTo ?category .
+  ?category ec:hasName   ?categoryName .
+}
+GROUP BY ?categoryName
+HAVING (COUNT(?product) > 2)
+ORDER BY DESC(?productCount)
+```
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  --data-raw 'PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?categoryName (COUNT(?product) AS ?productCount)
+WHERE {
+  ?product  a ec:Product ;
+            ec:belongsTo ?category .
+  ?category ec:hasName   ?categoryName .
+}
+GROUP BY ?categoryName
+HAVING (COUNT(?product) > 2)
+ORDER BY DESC(?productCount)'
+```
+
+```python Python
+query = """
+PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?categoryName (COUNT(?product) AS ?productCount)
+WHERE {
+  ?product  a ec:Product ;
+            ec:belongsTo ?category .
+  ?category ec:hasName   ?categoryName .
+}
+GROUP BY ?categoryName
+HAVING (COUNT(?product) > 2)
+ORDER BY DESC(?productCount)
+"""
+
+result = sparql_query(query)
+for row in result["results"]["bindings"]:
+    print(f"{row['categoryName']['value']:20s}: {row['productCount']['value']} products")
+```
+
+</CodeGroup>
+
+### OPTIONAL and UNION Patterns
+
+Use `OPTIONAL` to include results even when a property is absent, and `UNION` to merge results from two distinct graph patterns.
+
+**Query: retrieve products with their supplier if one exists, OR products that have no supplier but still have a SKU**
+
+```sparql
+PREFIX ec:   <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?productName ?sku ?supplierName
+WHERE {
+  { 
+    ?product a ec:Product ;
+             ec:hasName ?productName ;
+             ec:hasSKU  ?sku .
+    OPTIONAL {
+      ?product ec:suppliedBy ?supplier .
+      ?supplier ec:hasName   ?supplierName .
+    }
+  }
+  UNION
+  {
+    ?product a ec:Product ;
+             ec:hasName ?productName ;
+             ec:hasSKU  ?sku .
+    FILTER NOT EXISTS { ?product ec:suppliedBy ?any . }
+    BIND("No supplier assigned" AS ?supplierName)
+  }
+}
+ORDER BY ?productName
+```
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  --data-raw 'PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?productName ?sku ?supplierName
+WHERE {
+  {
+    ?product a ec:Product ;
+             ec:hasName ?productName ;
+             ec:hasSKU  ?sku .
+    OPTIONAL {
+      ?product ec:suppliedBy ?supplier .
+      ?supplier ec:hasName ?supplierName .
+    }
+  }
+  UNION
+  {
+    ?product a ec:Product ;
+             ec:hasName ?productName ;
+             ec:hasSKU  ?sku .
+    FILTER NOT EXISTS { ?product ec:suppliedBy ?any . }
+    BIND("No supplier assigned" AS ?supplierName)
+  }
+}
+ORDER BY ?productName'
+```
+
+```python Python
+query = """
+PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+SELECT ?productName ?sku ?supplierName
+WHERE {
+  {
+    ?product a ec:Product ;
+             ec:hasName ?productName ;
+             ec:hasSKU  ?sku .
+    OPTIONAL {
+      ?product ec:suppliedBy ?supplier .
+      ?supplier ec:hasName ?supplierName .
+    }
+  }
+  UNION
+  {
+    ?product a ec:Product ;
+             ec:hasName ?productName ;
+             ec:hasSKU  ?sku .
+    FILTER NOT EXISTS { ?product ec:suppliedBy ?any . }
+    BIND("No supplier assigned" AS ?supplierName)
+  }
+}
+ORDER BY ?productName
+"""
+
+result = sparql_query(query)
+for row in result["results"]["bindings"]:
+    supplier = row.get("supplierName", {}).get("value", "—")
+    print(f"{row['productName']['value']:30s}  {row['sku']['value']:15s}  {supplier}")
+```
+
+</CodeGroup>
+
+## CONSTRUCT — Build a New RDF Graph
+
+`CONSTRUCT` returns an RDF graph rather than a result table. Use it to reshape or extract a subgraph, or to transform your data into a different vocabulary.
+
+```sparql
+PREFIX ec:     <https://ontologies.anclab.io/ecommerce/v1#>
+PREFIX schema: <https://schema.org/>
+PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?product a schema:Product ;
+           schema:name      ?name ;
+           schema:sku       ?sku ;
+           schema:price     ?price ;
+           schema:brand     ?supplierName .
+}
+WHERE {
+  ?product a ec:Product ;
+           ec:hasName  ?name ;
+           ec:hasSKU   ?sku ;
+           ec:hasPrice ?price .
+  OPTIONAL {
+    ?product ec:suppliedBy ?supplier .
+    ?supplier ec:hasName   ?supplierName .
+  }
+}
+```
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  -H "Accept: text/turtle" \
+  --data-raw 'PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+PREFIX schema: <https://schema.org/>
+
+CONSTRUCT {
+  ?product a schema:Product ;
+           schema:name  ?name ;
+           schema:sku   ?sku ;
+           schema:price ?price .
+}
+WHERE {
+  ?product a ec:Product ;
+           ec:hasName  ?name ;
+           ec:hasSKU   ?sku ;
+           ec:hasPrice ?price .
+}'
+```
+
+```python Python
+construct_query = """
+PREFIX ec:     <https://ontologies.anclab.io/ecommerce/v1#>
+PREFIX schema: <https://schema.org/>
+
+CONSTRUCT {
+  ?product a schema:Product ;
+           schema:name  ?name ;
+           schema:sku   ?sku ;
+           schema:price ?price .
+}
+WHERE {
+  ?product a ec:Product ;
+           ec:hasName  ?name ;
+           ec:hasSKU   ?sku ;
+           ec:hasPrice ?price .
+}
+"""
+
+turtle_output = sparql_query(construct_query, accept="text/turtle")
+# turtle_output is a string of Turtle-serialised RDF
+print(turtle_output)
+```
+
+</CodeGroup>
+
+## ASK — Boolean Existence Check
+
+`ASK` returns `true` or `false` — useful for guard conditions in pipelines or simple existence checks.
+
+```sparql
+PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+
+ASK {
+  ?product a ec:Product ;
+           ec:hasSKU "WH-X200-BLK" .
+}
+```
+
+**Response:**
+
+```json
+{
+  "head": {},
+  "boolean": true
+}
+```
+
+## DESCRIBE — Entity Summary
+
+`DESCRIBE` returns all known triples about a resource, letting you quickly inspect an entity without knowing its exact property set.
+
+```sparql
+DESCRIBE <https://data.anclab.io/ecommerce/product/wireless-headphones-x200>
+```
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/query \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/sparql-query" \
+  -H "Accept: application/ld+json" \
+  --data-raw 'DESCRIBE <https://data.anclab.io/ecommerce/product/wireless-headphones-x200>'
+```
+
+```python Python
+describe_query = "DESCRIBE <https://data.anclab.io/ecommerce/product/wireless-headphones-x200>"
+jsonld = sparql_query(describe_query, accept="application/ld+json")
+print(jsonld)
+```
+
+</CodeGroup>
+
+## Next Steps
+
+With querying covered, explore how to derive higher-level insights from your data. Continue to [Run Data Analytics Over Your Knowledge Graph](/guides/data-analytics-workflows).

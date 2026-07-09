@@ -1,0 +1,568 @@
+---
+title: "Knowledge Graphs API: Manage Graph Datasets"
+sidebarTitle: "Graphs"
+description: "Create and manage RDF knowledge graph datasets, import and query triples, run inference, and export your graph data using the ANC Lab Graphs API."
+---
+
+The Knowledge Graphs API lets you create and populate RDF graph datasets that you can query with SPARQL, enrich with reasoner-generated inferences, and export to standard formats. Each graph can be linked to an ontology to enable schema-driven inference and validation. You can add triples individually via the JSON triples endpoint or bulk-import large RDF files directly from your filesystem.
+
+---
+
+## Triple Object Schema
+
+The following fields describe a single RDF triple as represented in JSON payloads:
+
+<ResponseField name="subject" type="object">
+  The subject of the triple.
+  <Expandable title="subject fields">
+    <ResponseField name="type" type="string">
+      One of `uri`, `blank_node`.
+    </ResponseField>
+    <ResponseField name="value" type="string">
+      The IRI string (for `uri`) or the blank node identifier (for `blank_node`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="predicate" type="object">
+  The predicate of the triple. Always `type: uri`.
+  <Expandable title="predicate fields">
+    <ResponseField name="type" type="string">
+      Always `uri`.
+    </ResponseField>
+    <ResponseField name="value" type="string">
+      The predicate IRI string.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="object" type="object">
+  The object of the triple.
+  <Expandable title="object fields">
+    <ResponseField name="type" type="string">
+      One of `uri`, `literal`, `blank_node`.
+    </ResponseField>
+    <ResponseField name="value" type="string">
+      The IRI, literal string, or blank node identifier.
+    </ResponseField>
+    <ResponseField name="datatype" type="string">
+      XSD datatype IRI for typed literals — for example, `http://www.w3.org/2001/XMLSchema#integer`. Present only when `type` is `literal`.
+    </ResponseField>
+    <ResponseField name="lang" type="string">
+      BCP 47 language tag for plain literals — for example, `en` or `fr`. Present only when `type` is `literal` and a language tag is set.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## List Knowledge Graphs
+
+```
+GET /graphs
+```
+
+Returns a paginated list of all knowledge graphs in your workspace.
+
+### Query Parameters
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Results per page. Defaults to `20`, maximum `100`.
+</ParamField>
+
+<ParamField query="ontology_id" type="string">
+  Filter graphs to only those linked to a specific ontology ID.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/graphs?page=1&limit=5" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+      "name": "Enterprise Product Catalogue",
+      "description": "RDF graph of all product SKUs and their relationships.",
+      "ontology_id": "ont_01HB3KQPZ7WVXN2MDTFY6REAJ",
+      "inference_enabled": true,
+      "triple_count": 458320,
+      "created_at": "2025-02-01T08:00:00Z",
+      "updated_at": "2025-04-14T16:30:00Z"
+    }
+  ],
+  "meta": { "page": 1, "limit": 5, "total": 1, "total_pages": 1 }
+}
+```
+
+---
+
+## Create a Knowledge Graph
+
+```
+POST /graphs
+```
+
+Creates a new, empty knowledge graph dataset. Populate it afterwards using the triples or import endpoints.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  A descriptive name for the graph. Example: `"Enterprise Product Catalogue"`.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional prose description of the graph's purpose and data domain.
+</ParamField>
+
+<ParamField body="ontology_id" type="string">
+  The ID of an existing ontology to link to this graph. Enables ontology-guided inference and SHACL validation. Omit to create an unbound graph.
+</ParamField>
+
+<ParamField body="inference_enabled" type="boolean">
+  Set to `true` to automatically run RDFS/OWL-RL inference whenever new triples are added. Defaults to `false`.
+</ParamField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Enterprise Product Catalogue",
+    "description": "RDF graph of all product SKUs and their relationships.",
+    "ontology_id": "ont_01HB3KQPZ7WVXN2MDTFY6REAJ",
+    "inference_enabled": false
+  }'
+```
+
+```python Python
+import os, requests
+
+payload = {
+    "name": "Enterprise Product Catalogue",
+    "description": "RDF graph of all product SKUs.",
+    "ontology_id": "ont_01HB3KQPZ7WVXN2MDTFY6REAJ",
+    "inference_enabled": False,
+}
+
+resp = requests.post(
+    "https://api.anclab.io/v1/graphs",
+    json=payload,
+    headers={"Authorization": f"Bearer {os.environ['ANCHUB_API_KEY']}"},
+)
+resp.raise_for_status()
+graph_id = resp.json()["data"]["id"]
+print("Created graph:", graph_id)
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "data": {
+    "id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "name": "Enterprise Product Catalogue",
+    "description": "RDF graph of all product SKUs and their relationships.",
+    "ontology_id": "ont_01HB3KQPZ7WVXN2MDTFY6REAJ",
+    "inference_enabled": false,
+    "triple_count": 0,
+    "created_at": "2025-04-10T10:00:00Z",
+    "updated_at": "2025-04-10T10:00:00Z"
+  }
+}
+```
+
+---
+
+## Get a Knowledge Graph
+
+```
+GET /graphs/{id}
+```
+
+Retrieves the full metadata record for a single knowledge graph.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+---
+
+## Delete a Knowledge Graph
+
+```
+DELETE /graphs/{id}
+```
+
+Permanently deletes the graph and all its triples. This operation is irreversible.
+
+<Warning>
+  Deleting a graph removes all triples it contains. Make sure to export the graph first if you need to preserve the data. There is no recycle bin or soft-delete.
+</Warning>
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID to delete.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X DELETE https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+---
+
+## Add Triples
+
+```
+POST /graphs/{id}/triples
+```
+
+Appends one or more triples to an existing graph. Send a JSON body with a `triples` array for structured input, or send raw Turtle with `Content-Type: text/turtle` for inline RDF snippets.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Request Body (JSON)
+
+<ParamField body="triples" type="array" required>
+  An array of triple objects, each with `subject`, `predicate`, and `object` fields as described in the Triple Object Schema above.
+</ParamField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash curl (JSON)
+curl -X POST https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/triples \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "triples": [
+      {
+        "subject":   { "type": "uri", "value": "https://example.com/products/SKU-001" },
+        "predicate": { "type": "uri", "value": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" },
+        "object":    { "type": "uri", "value": "https://schema.org/Product" }
+      },
+      {
+        "subject":   { "type": "uri", "value": "https://example.com/products/SKU-001" },
+        "predicate": { "type": "uri", "value": "https://schema.org/name" },
+        "object":    { "type": "literal", "value": "Titanium Gear Set", "lang": "en" }
+      }
+    ]
+  }'
+```
+
+```bash curl (Turtle)
+curl -X POST https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/triples \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: text/turtle" \
+  --data-binary '@snippet.ttl'
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "triples_added": 2,
+    "triple_count": 2
+  }
+}
+```
+
+---
+
+## Remove Triples
+
+```
+DELETE /graphs/{id}/triples
+```
+
+Removes specific triples from a graph. Supply the triples to remove in the same JSON format as the add endpoint.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Request Body
+
+<ParamField body="triples" type="array" required>
+  An array of triple objects to remove. Use `null` for any component to act as a wildcard — for example, set `object` to `null` to remove all triples with the given subject and predicate.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X DELETE https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/triples \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "triples": [
+      {
+        "subject":   { "type": "uri", "value": "https://example.com/products/SKU-001" },
+        "predicate": { "type": "uri", "value": "https://schema.org/name" },
+        "object":    null
+      }
+    ]
+  }'
+```
+
+---
+
+## Bulk Import RDF Data
+
+```
+POST /graphs/{id}/import
+```
+
+Imports an RDF file into the graph using a multipart form upload. Use this endpoint for large datasets where inline JSON triples would be impractical.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Form Fields
+
+<ParamField body="file" type="file" required>
+  The RDF file to import. Accepted MIME types: `text/turtle`, `application/rdf+xml`, `application/ld+json`, `application/n-quads`.
+</ParamField>
+
+<ParamField body="format" type="string" required>
+  Explicit format hint: `turtle`, `rdf-xml`, `jsonld`, or `nquads`. Use this if the file's Content-Type is ambiguous.
+</ParamField>
+
+<ParamField body="clear_existing" type="boolean">
+  Set to `true` to remove all existing triples before importing. Defaults to `false` (append mode).
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/import \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -F "file=@products.ttl;type=text/turtle" \
+  -F "format=turtle" \
+  -F "clear_existing=false"
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "triples_imported": 45832,
+    "triples_skipped": 12,
+    "triple_count": 45832,
+    "import_duration_ms": 3840
+  }
+}
+```
+
+---
+
+## Export Graph Data
+
+```
+GET /graphs/{id}/export
+```
+
+Downloads the full graph in your chosen RDF serialisation format.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="format" type="string">
+  Export format: `turtle` (default), `nquads`, `jsonld`.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/export?format=nquads" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -o graph-export.nq
+```
+
+---
+
+## Get Graph Statistics
+
+```
+GET /graphs/{id}/stats
+```
+
+Returns structural statistics for a graph, useful for monitoring data volume and density.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/stats \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Response Fields
+
+<ResponseField name="triple_count" type="integer">
+  Total number of triples in the graph, including inferred triples if inference has been run.
+</ResponseField>
+
+<ResponseField name="entity_count" type="integer">
+  Number of distinct subjects that appear as named URIs (excluding blank nodes).
+</ResponseField>
+
+<ResponseField name="relationship_count" type="integer">
+  Number of distinct predicates used across all triples.
+</ResponseField>
+
+<ResponseField name="classes_used" type="array">
+  An array of class IRIs that appear as objects of `rdf:type` triples in the graph.
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "triple_count": 458320,
+    "entity_count": 12450,
+    "relationship_count": 38,
+    "classes_used": [
+      "https://schema.org/Product",
+      "https://schema.org/ProductGroup",
+      "https://schema.org/Offer",
+      "https://schema.org/Organization"
+    ]
+  }
+}
+```
+
+---
+
+## Trigger Inference
+
+```
+POST /graphs/{id}/infer
+```
+
+Runs a reasoning pass over the graph to materialise inferred triples. Use this after bulk imports or when you need fresh inferences on demand.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique graph ID.
+</ParamField>
+
+### Request Body
+
+<ParamField body="profile" type="string">
+  Reasoning profile to apply. Accepted values:
+  - `rdfs` — RDFS subclass and subproperty entailments (fast)
+  - `owl-rl` — OWL 2 RL rule-based reasoning (balanced)
+  - `custom` — Use the ontology's declared reasoner configuration
+
+  Defaults to `rdfs`.
+</ParamField>
+
+<ParamField body="persist" type="boolean">
+  If `true`, write all inferred triples back into the graph as explicit triples. If `false`, inferences are computed at query time only. Defaults to `true`.
+</ParamField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/infer \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profile": "owl-rl",
+    "persist": true
+  }'
+```
+
+```python Python
+import os, requests
+
+resp = requests.post(
+    "https://api.anclab.io/v1/graphs/grph_03LD5MSRB9YWZP4OFVHJ1TGCK/infer",
+    json={"profile": "owl-rl", "persist": True},
+    headers={"Authorization": f"Bearer {os.environ['ANCHUB_API_KEY']}"},
+)
+resp.raise_for_status()
+result = resp.json()["data"]
+print(f"Inferred {result['triples_inferred']} new triples in {result['duration_ms']} ms")
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "profile": "owl-rl",
+    "triples_inferred": 18420,
+    "persist": true,
+    "triple_count": 476740,
+    "duration_ms": 2310
+  }
+}
+```
+
+<Tip>
+  Run inference with `persist: false` first to preview the inferred triple count without committing the results. Once you are satisfied, re-run with `persist: true`.
+</Tip>

@@ -1,0 +1,143 @@
+---
+title: "Supported Standards and Specifications"
+sidebarTitle: "Standards"
+description: "A complete reference of W3C and industry standards supported by the ANC Lab Knowledge Hub, including versions, profiles, and serialization formats."
+---
+
+The ANC Lab Knowledge Hub is built on open, interoperable standards so your data, queries, and schemas are portable and future-proof. Every standard listed here is actively supported in the platform — meaning you can ingest data, run queries, validate shapes, and apply reasoning using these specifications today. Where a standard has multiple profiles or versions, the supported subset is called out explicitly.
+
+---
+
+## Data Model
+
+The data model layer defines how information is represented and stored at the most fundamental level.
+
+<CardGroup cols={2}>
+  <Card title="RDF 1.1" icon="circle-nodes" href="https://www.w3.org/TR/rdf11-concepts/">
+    **Resource Description Framework, version 1.1.** RDF is the W3C foundational data model for the Semantic Web. All data in the Knowledge Hub is stored and exchanged as RDF triples. Version 1.1 introduced Unicode IRIs as a first-class concept, improved datatype handling, and the notion of datasets with named graphs. Learn more at [w3.org/TR/rdf11-concepts](https://www.w3.org/TR/rdf11-concepts/).
+  </Card>
+  <Card title="RDF-star" icon="star" href="https://www.w3.org/2021/12/rdf-star.html">
+    **RDF-star (formerly RDF*).** RDF-star extends RDF by allowing triples to be the subject or object of other triples — enabling direct annotation of statements without reification workarounds. Use RDF-star to attach provenance, confidence scores, or timestamps to individual triples. The Knowledge Hub supports RDF-star in both Turtle-star and JSON-LD-star serializations.
+  </Card>
+</CardGroup>
+
+---
+
+## Ontology Languages
+
+Ontology languages provide the vocabulary and logic for describing the structure and meaning of your domain.
+
+<CardGroup cols={2}>
+  <Card title="OWL 2" icon="diagram-project" href="https://www.w3.org/TR/owl2-overview/">
+    **Web Ontology Language 2.** OWL 2 is the W3C standard for expressive ontology modelling. The Knowledge Hub supports all five OWL 2 profiles:
+    - **EL** — polynomial-time reasoning over large biomedical ontologies
+    - **QL** — query rewriting over relational data
+    - **RL** — rule-based reasoning with scalable forward chaining
+    - **DL** — full description-logic expressivity with decidable reasoning
+    - **Full** — maximum expressivity, undecidable but useful for documentation
+
+    Learn more at [w3.org/TR/owl2-overview](https://www.w3.org/TR/owl2-overview/).
+  </Card>
+  <Card title="SKOS & SKOS-XL" icon="tags" href="https://www.w3.org/TR/skos-reference/">
+    **Simple Knowledge Organization System.** SKOS provides a lightweight vocabulary for representing thesauri, taxonomies, classification schemes, and controlled vocabularies as RDF. SKOS-XL (eXtended Labels) extends SKOS to allow rich, reifiable labelling of concepts. Use SKOS when your domain is better described as a vocabulary than a formal ontology. Learn more at [w3.org/TR/skos-reference](https://www.w3.org/TR/skos-reference/).
+  </Card>
+</CardGroup>
+
+---
+
+## Shapes & Validation
+
+Validation standards let you define and enforce the structural integrity of your RDF graphs.
+
+<CardGroup cols={2}>
+  <Card title="SHACL" icon="shield-check" href="https://www.w3.org/TR/shacl/">
+    **Shapes Constraint Language.** SHACL is the W3C standard for validating RDF graphs against a set of conditions (shapes). You declare target classes, required properties, value types, and cardinality rules as SHACL shapes; the engine reports violations in a machine-readable results graph. The Knowledge Hub runs SHACL validation on demand or automatically on data ingestion. Learn more at [w3.org/TR/shacl](https://www.w3.org/TR/shacl/).
+  </Card>
+  <Card title="SHACL-AF" icon="shield-plus" href="https://www.w3.org/TR/shacl-af/">
+    **SHACL Advanced Features.** SHACL-AF extends core SHACL with SPARQL-based constraints, custom targets, rules, and non-validating result generation. Use SHACL-AF when your data quality requirements go beyond structural checks — for example, to enforce cross-graph consistency or compute derived values during validation. Learn more at [w3.org/TR/shacl-af](https://www.w3.org/TR/shacl-af/).
+  </Card>
+</CardGroup>
+
+---
+
+## Query Language
+
+The Knowledge Hub exposes a fully compliant SPARQL endpoint for each dataset you create.
+
+<CardGroup cols={2}>
+  <Card title="SPARQL 1.1 Query" icon="magnifying-glass" href="https://www.w3.org/TR/sparql11-query/">
+    **SPARQL 1.1 Query Language.** Supports all four query forms:
+    - **SELECT** — return tabular bindings
+    - **CONSTRUCT** — build a new RDF graph from results
+    - **ASK** — return a boolean answer
+    - **DESCRIBE** — return an RDF description of a resource
+
+    Also supports aggregates, subqueries, property paths, `OPTIONAL`, `FILTER`, `BIND`, `VALUES`, `EXISTS`, and `NOT EXISTS`. Learn more at [w3.org/TR/sparql11-query](https://www.w3.org/TR/sparql11-query/).
+  </Card>
+  <Card title="SPARQL 1.1 Update & Federation" icon="arrows-rotate" href="https://www.w3.org/TR/sparql11-update/">
+    **SPARQL 1.1 Update, Graph Management, and Federation.** Supports `INSERT DATA`, `DELETE DATA`, `INSERT/DELETE WHERE`, `LOAD`, `CLEAR`, `DROP`, `CREATE`, and `COPY` for graph mutation. The `GRAPH` keyword targets named graphs within a dataset. The `SERVICE` keyword enables federated queries across remote SPARQL endpoints. Learn more at [w3.org/TR/sparql11-update](https://www.w3.org/TR/sparql11-update/).
+  </Card>
+</CardGroup>
+
+---
+
+## Serialization Formats
+
+The Knowledge Hub reads and writes all widely used RDF serialization formats.
+
+<CardGroup cols={2}>
+  <Card title="Turtle & N-Triples" icon="file-code" href="https://www.w3.org/TR/turtle/">
+    **Turtle (Terse RDF Triple Language)** is the recommended format for hand-authoring ontologies and small datasets — it is compact, readable, and supports `@prefix` abbreviations. **N-Triples** is a line-by-line, no-prefix format ideal for streaming and bulk ingestion pipelines. Both are W3C standards. Learn more at [w3.org/TR/turtle](https://www.w3.org/TR/turtle/).
+  </Card>
+  <Card title="N-Quads & TriG" icon="layer-group" href="https://www.w3.org/TR/n-quads/">
+    **N-Quads** extends N-Triples with a fourth graph-name component, making it the standard format for bulk export/import of named-graph datasets. **TriG** extends Turtle with named-graph blocks, giving you a readable multi-graph format. Use these formats whenever your dataset contains more than one named graph. Learn more at [w3.org/TR/n-quads](https://www.w3.org/TR/n-quads/).
+  </Card>
+  <Card title="JSON-LD 1.1" icon="brackets-curly" href="https://www.w3.org/TR/json-ld11/">
+    **JSON-LD 1.1** serializes RDF as JSON with a `@context` that maps JSON keys to IRIs. It is the preferred format for REST APIs and JavaScript applications that need to consume semantic data without a dedicated RDF library. The Knowledge Hub supports the full JSON-LD 1.1 processing algorithms including framing and compaction. Learn more at [w3.org/TR/json-ld11](https://www.w3.org/TR/json-ld11/).
+  </Card>
+  <Card title="RDF/XML" icon="file-xml" href="https://www.w3.org/TR/rdf-syntax-grammar/">
+    **RDF/XML** is the original W3C RDF serialization format and remains the most common format for distributing OWL ontologies (`.owl` files). The Knowledge Hub accepts RDF/XML for import and exports it on request. For new work, prefer Turtle or JSON-LD — RDF/XML is verbose and harder to read. Learn more at [w3.org/TR/rdf-syntax-grammar](https://www.w3.org/TR/rdf-syntax-grammar/).
+  </Card>
+</CardGroup>
+
+---
+
+## Rules
+
+Rule languages let you express inference patterns that go beyond what OWL axioms can capture.
+
+<CardGroup cols={2}>
+  <Card title="SWRL" icon="gavel" href="https://www.w3.org/Submission/SWRL/">
+    **Semantic Web Rule Language.** SWRL combines OWL-DL with Horn-clause rules, letting you write if–then patterns like "if a person has a parent who has a sibling, then that sibling is their aunt or uncle." The Knowledge Hub executes SWRL rules via a built-in rule engine that fires rules forward-chain during reasoning. Learn more at [w3.org/Submission/SWRL](https://www.w3.org/Submission/SWRL/).
+  </Card>
+  <Card title="SPIN" icon="rotate" href="https://spinrdf.org/">
+    **SPARQL Inferencing Notation.** SPIN represents OWL axioms, SPARQL-based rules, and constraints as RDF triples, making rules themselves first-class graph citizens. You can attach SPIN rules directly to OWL classes and query them like any other graph data. Learn more at [spinrdf.org](https://spinrdf.org/).
+  </Card>
+</CardGroup>
+
+---
+
+## Linked Data & Metadata Vocabularies
+
+These specifications govern how the Knowledge Hub publishes and interoperates with external data ecosystems.
+
+<CardGroup cols={2}>
+  <Card title="Linked Data Principles" icon="link" href="https://www.w3.org/DesignIssues/LinkedData.html">
+    **Tim Berners-Lee's four Linked Data principles** underpin how the Knowledge Hub publishes data: use HTTP URIs as names, make them dereferenceable, return useful RDF on lookup, and include links to external URIs. Publishing your graphs as Linked Data makes them discoverable and interoperable across the open web. Learn more at [w3.org/DesignIssues/LinkedData](https://www.w3.org/DesignIssues/LinkedData.html).
+  </Card>
+  <Card title="DCAT 3" icon="database" href="https://www.w3.org/TR/vocab-dcat-3/">
+    **Data Catalog Vocabulary, version 3.** DCAT is the W3C vocabulary for describing datasets and data services in a catalog. The Knowledge Hub uses DCAT 3 to expose dataset metadata — title, description, publisher, license, access URL — so your datasets are discoverable by external catalogs and data portals. Learn more at [w3.org/TR/vocab-dcat-3](https://www.w3.org/TR/vocab-dcat-3/).
+  </Card>
+  <Card title="Dublin Core" icon="book-open" href="https://www.dublincore.org/specifications/dublin-core/">
+    **Dublin Core Metadata Initiative.** Dublin Core provides a small, universal set of metadata elements — title, creator, date, description, subject, format, and more — widely used for annotating ontologies and datasets. The Knowledge Hub recognises both `dc:` (legacy) and `dcterms:` (terms) namespaces. Learn more at [dublincore.org](https://www.dublincore.org/specifications/dublin-core/).
+  </Card>
+  <Card title="schema.org" icon="sitemap" href="https://schema.org/">
+    **schema.org** is a collaborative, community-maintained vocabulary for structured data on the web, used by Google, Bing, Yahoo, and Yandex for rich search results. The Knowledge Hub lets you annotate your knowledge graph nodes with schema.org types and properties to improve web discoverability. Learn more at [schema.org](https://schema.org/).
+  </Card>
+</CardGroup>
+
+---
+
+<Note>
+  **Standards roadmap.** The ANC Lab team is actively evaluating **RDF 1.2**, **SPARQL 1.2**, **OWL 2 RL extended profiles**, and **ShEx** (Shape Expressions) for future support. Watch the [FAQ](/reference/faq) for announcements, or vote on upcoming standards in the **Community** forum.
+</Note>

@@ -1,0 +1,197 @@
+---
+title: "Knowledge Graphs: Structure, Nodes, and Edges"
+sidebarTitle: "Knowledge Graphs"
+description: "Understand how knowledge graphs represent entities and relationships as triples, how RDF underpins the data model, and where knowledge graphs are applied."
+---
+
+A knowledge graph is a network of real-world entities — people, places, products, events, concepts — connected by labelled, directed relationships. Each entity is a node, each relationship is an edge, and together they form a graph that machines can traverse, query, and reason over. Unlike a flat relational database, a knowledge graph captures the *meaning* of connections, not just the fact that two records are associated. The ontology acts as its schema, defining what kinds of entities and relationships are valid; the knowledge graph itself is where the actual data lives.
+
+## The Two Layers: Schema and Data
+
+It helps to think of a knowledge graph as having two distinct but inseparable layers:
+
+<CardGroup cols={2}>
+  <Card title="Ontology Layer (Schema)" icon="sitemap">
+    Defines **classes**, **properties**, and **axioms**. This is the blueprint — it says that a `Person` can `worksFor` an `Organisation`, and that an `Organisation` must have exactly one `legalName`.
+  </Card>
+  <Card title="Graph Layer (Data)" icon="database">
+    Contains the **individuals** and **triples** that conform to the ontology. This is the populated graph — it says that *Alice* `worksFor` *ANC Lab* and *ANC Lab* has `legalName` "ANC Lab Ltd".
+  </Card>
+</CardGroup>
+
+Separating the layers lets you evolve your schema independently of your data, reuse the same ontology across multiple graphs, and validate new data against a stable contract.
+
+---
+
+## Key Concepts
+
+### Triple — Subject, Predicate, Object
+
+The atomic unit of an RDF knowledge graph is the **triple**: a statement made up of three parts.
+
+| Part | Role | Example |
+|---|---|---|
+| Subject | The entity being described | `:Alice` |
+| Predicate | The property or relationship | `:worksFor` |
+| Object | The value or related entity | `:ANCLab` |
+
+String them together and you get a machine-readable sentence: *Alice works for ANC Lab.*
+
+### Entity
+
+An **entity** is any named, uniquely identified thing — a person, organisation, product, location, or abstract concept. In RDF every entity is identified by a URI (Uniform Resource Identifier), which makes it globally unambiguous and linkable across datasets.
+
+### Relationship
+
+A **relationship** (object property triple) connects two entities. Relationships are first-class citizens in a knowledge graph: they carry labels, can have properties of their own in named graphs, and can be traversed in both directions by a query engine.
+
+### Named Graph
+
+A **named graph** is a set of triples bundled under a fourth URI — the graph name. Named graphs let you track provenance (where did these triples come from?), manage access control at a graph level, and record metadata such as ingestion timestamps.
+
+```turtle
+# A named graph with provenance metadata
+GRAPH <https://data.anclab.io/graph/hr-2024> {
+  :Alice  :worksFor   :ANCLab ;
+          :jobTitle   "Knowledge Engineer" .
+}
+
+# Metadata about the named graph itself
+<https://data.anclab.io/graph/hr-2024>
+    :createdAt  "2024-03-15T09:00:00Z"^^xsd:dateTime ;
+    :source     <https://hr.anclab.io/export> .
+```
+
+### Dataset
+
+A **dataset** is a collection of named graphs plus one default graph. The W3C RDF Dataset specification formalises this structure. When you load a Turtle file without a graph name, its triples land in the default graph.
+
+---
+
+## RDF as the Data Model
+
+RDF (Resource Description Framework) is the W3C standard that underpins knowledge graphs on the semantic web. It gives you:
+
+- **URI-based identification** — every entity and property has a globally unique identifier.
+- **Open-world semantics** — the absence of a triple does not mean something is false; it just means it is not known.
+- **Linked Data compatibility** — URIs can be dereferenced, so graphs can link to and extend each other across the web.
+
+### Turtle Example: A Small Knowledge Graph
+
+The Turtle serialisation below shows a compact, human-readable RDF knowledge graph for an organisation's people and projects.
+
+```turtle
+@prefix :      <https://data.anclab.io/kg#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf:  <http://xmlns.com/foaf/0.1/> .
+@prefix org:   <http://www.w3.org/ns/org#> .
+
+# ── Entities ──────────────────────────────────────────────────────────────────
+:Alice   a foaf:Person ;
+         foaf:name        "Alice Müller" ;
+         foaf:mbox        <mailto:alice@anclab.io> ;
+         org:memberOf     :ANCLab ;
+         :leadsProject    :KGProject2024 .
+
+:Bob     a foaf:Person ;
+         foaf:name        "Bob Tanaka" ;
+         org:memberOf     :ANCLab ;
+         :contributesTo   :KGProject2024 .
+
+:ANCLab  a org:Organization ;
+         foaf:name        "ANC Lab" ;
+         org:hasSite      :BerlinOffice .
+
+:BerlinOffice a org:Site ;
+         org:siteAddress  "Unter den Linden 1, Berlin, DE" .
+
+# ── Project ──────────────────────────────────────────────────────────────────
+:KGProject2024  a :Project ;
+                rdfs:label    "Knowledge Graph Platform 2024"@en ;
+                :startDate    "2024-01-01"^^xsd:date ;
+                :status       "active" ;
+                :usesOntology <https://ontology.anclab.io/core> .
+```
+
+---
+
+## RDF Graph vs. Property Graph
+
+<Note>
+  RDF graphs and **property graphs** (used by databases such as Neo4j and Amazon Neptune in its property graph mode) are two distinct data models. In a **property graph**, nodes and edges can each carry arbitrary key-value properties directly. In an **RDF graph**, properties on a relationship must be reified into a new node or represented as a named graph, because triples only have three positions. RDF excels at open-world, linked-data scenarios with rich schema semantics, while property graphs are often simpler to work with for local traversal queries. Many modern platforms support both models.
+</Note>
+
+---
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Enterprise Knowledge Graphs" icon="building">
+    Unify siloed data from ERP, CRM, HR, and document systems into a single queryable graph. Enable 360° views of customers, products, and processes without rewriting source systems.
+  </Card>
+  <Card title="Biomedical Research" icon="flask">
+    Link genes, proteins, diseases, drugs, and clinical trials. Accelerate drug discovery by surfacing non-obvious connections across millions of published findings.
+  </Card>
+  <Card title="Supply Chain & Logistics" icon="truck">
+    Model suppliers, components, locations, and certifications as a graph. Identify single-points-of-failure and simulate disruption scenarios with graph traversal queries.
+  </Card>
+  <Card title="Financial Services" icon="landmark">
+    Represent entities, ownership structures, transactions, and regulatory relationships. Detect fraud rings and assess counterparty risk through graph pattern matching.
+  </Card>
+  <Card title="Smart Search & Recommendations" icon="magnifying-glass">
+    Connect content, topics, users, and interactions. Generate recommendations by walking the graph from a user's interests to semantically related items.
+  </Card>
+  <Card title="Regulatory Compliance" icon="shield-halved">
+    Map obligations, controls, assets, and evidence. Answer audit queries like "which controls cover this regulation?" with a single SPARQL query over a compliance graph.
+  </Card>
+</CardGroup>
+
+---
+
+## Querying the Graph with SPARQL
+
+SPARQL is the W3C query language for RDF knowledge graphs. A basic SELECT query looks for triple patterns in the graph, binding variables where patterns match.
+
+```sparql
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX org:  <http://www.w3.org/ns/org#>
+PREFIX :     <https://data.anclab.io/kg#>
+
+# Find all people in ANC Lab and the projects they lead
+SELECT ?name ?projectLabel
+WHERE {
+  ?person  a          foaf:Person ;
+           foaf:name  ?name ;
+           org:memberOf :ANCLab ;
+           :leadsProject ?project .
+
+  ?project rdfs:label  ?projectLabel .
+}
+ORDER BY ?name
+```
+
+| name | projectLabel |
+|---|---|
+| Alice Müller | Knowledge Graph Platform 2024 |
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Ontology" icon="sitemap" href="/concepts/ontology">
+    Revisit how ontologies define the schema layer that governs your knowledge graph.
+  </Card>
+  <Card title="Semantics & Inference" icon="brain" href="/concepts/semantics">
+    Learn how semantic reasoning derives new facts from your graph automatically.
+  </Card>
+  <Card title="Graph Analytics" icon="chart-network" href="/concepts/data-analytics">
+    Run centrality, path-finding, and aggregation analytics directly over your knowledge graph.
+  </Card>
+  <Card title="SPARQL Query Guide" icon="terminal" href="/guides/semantic-querying">
+    Go deeper with SPARQL: filters, aggregations, subqueries, and federated queries.
+  </Card>
+</CardGroup>

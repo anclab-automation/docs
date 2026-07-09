@@ -1,0 +1,400 @@
+---
+title: "Analytics API: Graph Metrics and Insights"
+sidebarTitle: "Analytics"
+description: "Compute graph metrics, run custom SPARQL aggregations, and schedule recurring analytics reports on your ANC Lab knowledge graphs."
+---
+
+The Analytics API gives you prebuilt graph metrics — entity distribution, relationship density, centrality, path analysis, and cluster detection — alongside a flexible endpoint for custom SPARQL aggregation queries. Run analyses on demand or schedule recurring reports to be delivered via webhook, so you always have fresh insight into the structure and health of your knowledge graphs.
+
+---
+
+## Run Graph Analytics
+
+```
+GET /analytics
+```
+
+Executes a built-in analytics metric against a knowledge graph and returns structured results.
+
+### Query Parameters
+
+<ParamField query="graph_id" type="string" required>
+  The ID of the knowledge graph to analyse.
+</ParamField>
+
+<ParamField query="metric" type="string" required>
+  The analytics metric to compute. Accepted values:
+  - `entity_distribution` — count of entities grouped by `rdf:type` class
+  - `relationship_density` — ratio of triples to entities per predicate
+  - `centrality` — PageRank-style importance score for each entity
+  - `path_analysis` — shortest-path distances between entity pairs
+  - `cluster_detection` — community clusters identified by modularity algorithm
+</ParamField>
+
+<ParamField query="entity_class" type="string">
+  Filter the metric to entities of a specific class IRI. For example, pass `https://schema.org/Product` to compute centrality only over product entities.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Maximum number of result rows to return. Defaults to `100`, maximum `1000`.
+</ParamField>
+
+<Tip>
+  For large graphs, combine `entity_class` filtering with a lower `limit` to get fast, focused results. Fetching the top 20 most central entities within a single class is typically an order of magnitude faster than computing centrality across the entire graph.
+</Tip>
+
+### Example: Entity Distribution
+
+```bash curl
+curl "https://api.anclab.io/v1/analytics?graph_id=grph_03LD5MSRB9YWZP4OFVHJ1TGCK&metric=entity_distribution&limit=10" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "metric": "entity_distribution",
+    "computed_at": "2025-04-15T11:00:00Z",
+    "results": [
+      { "class": "https://schema.org/Product",       "count": 8420 },
+      { "class": "https://schema.org/Offer",          "count": 3105 },
+      { "class": "https://schema.org/Organization",   "count": 724  },
+      { "class": "https://schema.org/ProductGroup",   "count": 201  }
+    ]
+  }
+}
+```
+
+### Example: Centrality
+
+```bash curl
+curl "https://api.anclab.io/v1/analytics?graph_id=grph_03LD5MSRB9YWZP4OFVHJ1TGCK&metric=centrality&entity_class=https%3A%2F%2Fschema.org%2FProduct&limit=5" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "metric": "centrality",
+    "entity_class": "https://schema.org/Product",
+    "computed_at": "2025-04-15T11:05:00Z",
+    "results": [
+      { "entity": "https://example.com/products/SKU-001", "label": "Titanium Gear Set",   "score": 0.9823 },
+      { "entity": "https://example.com/products/SKU-047", "label": "Carbon Fibre Frame",  "score": 0.9741 },
+      { "entity": "https://example.com/products/SKU-012", "label": "Alloy Handlebar Set", "score": 0.9610 },
+      { "entity": "https://example.com/products/SKU-088", "label": "Hydraulic Disc Brake","score": 0.9502 },
+      { "entity": "https://example.com/products/SKU-033", "label": "Cassette 11-Speed",   "score": 0.9387 }
+    ]
+  }
+}
+```
+
+---
+
+## Run a Custom Analytics Query
+
+```
+POST /analytics/query
+```
+
+Executes an arbitrary SPARQL query with aggregate operations and returns the results in JSON or CSV. Use this endpoint when the built-in metrics do not cover your specific analytical need.
+
+### Request Body
+
+<ParamField body="query" type="string" required>
+  A SPARQL 1.1 query that uses aggregate functions (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP_CONCAT`) and a `GROUP BY` clause.
+</ParamField>
+
+<ParamField body="graph_id" type="string" required>
+  The ID of the knowledge graph to query.
+</ParamField>
+
+<ParamField body="format" type="string">
+  Output format: `json` (default) or `csv`.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/analytics/query \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "PREFIX schema: <https://schema.org/>\nSELECT ?supplier (COUNT(?product) AS ?productCount) (AVG(?price) AS ?avgPrice)\nWHERE {\n  ?product a schema:Product ;\n           schema:manufacturer ?supplier ;\n           schema:price ?price .\n}\nGROUP BY ?supplier\nORDER BY DESC(?productCount)\nLIMIT 20",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "format": "json"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "rows": 20,
+    "results": [
+      {
+        "supplier":     { "type": "uri",     "value": "https://example.com/suppliers/SUP-42" },
+        "productCount": { "type": "literal", "value": "340", "datatype": "http://www.w3.org/2001/XMLSchema#integer" },
+        "avgPrice":     { "type": "literal", "value": "89.42", "datatype": "http://www.w3.org/2001/XMLSchema#decimal" }
+      },
+      {
+        "supplier":     { "type": "uri",     "value": "https://example.com/suppliers/SUP-07" },
+        "productCount": { "type": "literal", "value": "218", "datatype": "http://www.w3.org/2001/XMLSchema#integer" },
+        "avgPrice":     { "type": "literal", "value": "124.90", "datatype": "http://www.w3.org/2001/XMLSchema#decimal" }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## List Saved Reports
+
+```
+GET /analytics/reports
+```
+
+Returns all saved analytics reports in your workspace, including their schedule configuration and last execution status.
+
+### Query Parameters
+
+<ParamField query="page" type="integer">
+  Page number. Defaults to `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Results per page. Defaults to `20`, maximum `100`.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/analytics/reports?page=1&limit=10" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "rpt_04ME6NTSCA1ZPQ5PGWIK2UHDO",
+      "name": "Weekly Entity Distribution",
+      "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+      "metric": "entity_distribution",
+      "schedule": "0 8 * * 1",
+      "last_run_at": "2025-04-14T08:00:00Z",
+      "last_run_status": "success",
+      "created_at": "2025-03-01T09:00:00Z"
+    }
+  ],
+  "meta": { "page": 1, "limit": 10, "total": 1, "total_pages": 1 }
+}
+```
+
+---
+
+## Create a Saved Report
+
+```
+POST /analytics/reports
+```
+
+Creates a saved analytics report that you can run on demand or on a recurring schedule.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  A descriptive name for the report. Example: `"Weekly Entity Distribution"`.
+</ParamField>
+
+<ParamField body="graph_id" type="string" required>
+  The ID of the knowledge graph to run this report against.
+</ParamField>
+
+<ParamField body="metric" type="string" required>
+  The analytics metric this report will compute. Same accepted values as `GET /analytics` — `entity_distribution`, `relationship_density`, `centrality`, `path_analysis`, or `cluster_detection`.
+</ParamField>
+
+<ParamField body="schedule" type="string">
+  A cron expression defining when the report runs automatically. Omit to create a manual-only report. Example: `"0 8 * * 1"` runs every Monday at 08:00 UTC.
+</ParamField>
+
+<ParamField body="webhook_url" type="string">
+  An HTTPS URL to call with the report results after each scheduled execution. The platform sends a `POST` request with a JSON body containing the report ID and a signed download URL for the results.
+</ParamField>
+
+### Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/analytics/reports \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Weekly Entity Distribution",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "metric": "entity_distribution",
+    "schedule": "0 8 * * 1",
+    "webhook_url": "https://hooks.myapp.io/anclab-reports"
+  }'
+```
+
+```python Python
+import os, requests
+
+payload = {
+    "name": "Weekly Entity Distribution",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "metric": "entity_distribution",
+    "schedule": "0 8 * * 1",
+    "webhook_url": "https://hooks.myapp.io/anclab-reports",
+}
+
+resp = requests.post(
+    "https://api.anclab.io/v1/analytics/reports",
+    json=payload,
+    headers={"Authorization": f"Bearer {os.environ['ANCHUB_API_KEY']}"},
+)
+resp.raise_for_status()
+print("Report created:", resp.json()["data"]["id"])
+```
+
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "data": {
+    "id": "rpt_04ME6NTSCA1ZPQ5PGWIK2UHDO",
+    "name": "Weekly Entity Distribution",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "metric": "entity_distribution",
+    "schedule": "0 8 * * 1",
+    "webhook_url": "https://hooks.myapp.io/anclab-reports",
+    "last_run_at": null,
+    "last_run_status": null,
+    "created_at": "2025-04-15T11:30:00Z"
+  }
+}
+```
+
+<Note>
+  Scheduled reports run in UTC. After each execution, the platform delivers results to your `webhook_url` (if configured) within 60 seconds. The webhook payload contains a `download_url` signed with a 24-hour expiry so your system can fetch the full results at its own pace. Configure retry logic on your webhook receiver — ANC Lab retries failed deliveries up to 3 times with exponential backoff.
+</Note>
+
+---
+
+## Execute a Saved Report
+
+```
+GET /analytics/reports/{id}/run
+```
+
+Triggers an immediate, on-demand execution of a saved report and returns the results synchronously.
+
+### Path Parameter
+
+<ParamField path="id" type="string" required>
+  The unique report ID to execute.
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="limit" type="integer">
+  Override the default result row limit for this execution. Defaults to `100`, maximum `1000`.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/analytics/reports/rpt_04ME6NTSCA1ZPQ5PGWIK2UHDO/run?limit=50" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "report_id": "rpt_04ME6NTSCA1ZPQ5PGWIK2UHDO",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "metric": "entity_distribution",
+    "computed_at": "2025-04-15T11:35:00Z",
+    "duration_ms": 320,
+    "results": [
+      { "class": "https://schema.org/Product",     "count": 8420 },
+      { "class": "https://schema.org/Offer",        "count": 3105 },
+      { "class": "https://schema.org/Organization", "count": 724  }
+    ]
+  }
+}
+```
+
+---
+
+## Python Example: Top 10 Central Entities
+
+The following example fetches centrality scores for all products and prints the top 10 by score.
+
+```python Python
+import os
+import requests
+
+API_KEY  = os.environ["ANCHUB_API_KEY"]
+GRAPH_ID = "grph_03LD5MSRB9YWZP4OFVHJ1TGCK"
+BASE_URL = "https://api.anclab.io/v1"
+
+headers = {"Authorization": f"Bearer {API_KEY}"}
+
+params = {
+    "graph_id":     GRAPH_ID,
+    "metric":       "centrality",
+    "entity_class": "https://schema.org/Product",
+    "limit":        10,
+}
+
+resp = requests.get(f"{BASE_URL}/analytics", params=params, headers=headers)
+resp.raise_for_status()
+
+results = resp.json()["data"]["results"]
+
+print(f"{'Rank':<6} {'Score':<8} Entity")
+print("-" * 70)
+for rank, row in enumerate(results, start=1):
+    label = row.get("label", row["entity"].split("/")[-1])
+    print(f"{rank:<6} {row['score']:<8.4f} {label}")
+```
+
+**Sample output:**
+
+```
+Rank   Score    Entity
+----------------------------------------------------------------------
+1      0.9823   Titanium Gear Set
+2      0.9741   Carbon Fibre Frame
+3      0.9610   Alloy Handlebar Set
+4      0.9502   Hydraulic Disc Brake
+5      0.9387   Cassette 11-Speed
+6      0.9214   Bottom Bracket BSA
+7      0.9108   Tubeless Tyre 700c
+8      0.8992   Chain 12-Speed
+9      0.8876   Saddle Carbon Rail
+10     0.8761   Stem 31.8mm Clamp
+```
+
+<Tip>
+  The `GET /analytics` endpoint returns up to 1 000 rows per request. For metric computations that produce more results — common with `cluster_detection` on large graphs — use the `limit` and `page` parameters together to page through all results without overwhelming your application's memory. Process each page incrementally rather than collecting all rows before analysis.
+</Tip>

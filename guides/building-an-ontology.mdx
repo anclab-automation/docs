@@ -1,0 +1,468 @@
+---
+title: "Build an Ontology from Scratch"
+sidebarTitle: "Build Ontology"
+description: "Learn how to design and publish a production-ready OWL ontology using the ANC Lab Knowledge Hub API, from domain scoping to SHACL validation."
+---
+
+Ontologies give your knowledge graph its structure — they define the classes, relationships, and rules that make your data meaningful and machine-readable. This guide walks you through building a complete ontology for an e-commerce product catalog, covering everything from initial domain scoping to validating your finished model with SHACL constraints.
+
+<Steps>
+
+### Define Your Domain Scope
+
+Before writing a single triple, clearly articulate the boundaries of your ontology. Ask yourself what entities matter, what relationships connect them, and what questions your ontology must be able to answer. For a product catalog, your core entities are **Product**, **Category**, and **Supplier**.
+
+Sketch a simple concept map:
+
+```
+Product ──belongsTo──▶ Category
+Product ──suppliedBy──▶ Supplier
+Product ──hasName, hasPrice, hasSKU (data properties)
+Supplier ──hasName, hasEmail (data properties)
+```
+
+<Tip>
+Before building from scratch, check whether a public vocabulary already covers your domain. [schema.org](https://schema.org) defines `Product`, `Offer`, and `Organization`; [Dublin Core](https://dublincore.org/specifications/dublin-core/) covers general metadata like titles and descriptions. Reusing these terms makes your data interoperable with the wider linked-data ecosystem.
+</Tip>
+
+### Create the Ontology via API
+
+Once your scope is clear, create a new ontology resource on the platform. Supply a unique IRI, a human-readable label, and an optional description.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/ontologies \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1",
+    "label": "E-Commerce Product Catalog Ontology",
+    "description": "Ontology for products, categories, and suppliers in an e-commerce platform.",
+    "language": "OWL2"
+  }'
+```
+
+```python Python
+import requests
+
+BASE_URL = "https://api.anclab.io/v1"
+HEADERS = {
+    "Authorization": "Bearer anchub_sk_...",
+    "Content-Type": "application/json",
+}
+
+payload = {
+    "iri": "https://ontologies.anclab.io/ecommerce/v1",
+    "label": "E-Commerce Product Catalog Ontology",
+    "description": "Ontology for products, categories, and suppliers.",
+    "language": "OWL2",
+}
+
+response = requests.post(f"{BASE_URL}/ontologies", json=payload, headers=HEADERS)
+ontology = response.json()
+ontology_id = ontology["id"]
+print(f"Created ontology: {ontology_id}")
+```
+
+</CodeGroup>
+
+The response returns an `id` (e.g., `ont_7x9kABcDef`) that you'll use in subsequent calls.
+
+### Add Classes
+
+Classes represent the core entity types in your domain. Add `Product`, `Category`, and `Supplier` as top-level OWL classes.
+
+<CodeGroup>
+
+```bash curl
+# Add the Product class
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/classes \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#Product",
+    "label": "Product",
+    "comment": "A tangible or digital item available for purchase."
+  }'
+
+# Add the Category class
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/classes \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#Category",
+    "label": "Category",
+    "comment": "A grouping of related products."
+  }'
+
+# Add the Supplier class
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/classes \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#Supplier",
+    "label": "Supplier",
+    "comment": "An organisation that provides products."
+  }'
+```
+
+```python Python
+classes = [
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#Product",
+        "label": "Product",
+        "comment": "A tangible or digital item available for purchase.",
+    },
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#Category",
+        "label": "Category",
+        "comment": "A grouping of related products.",
+    },
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#Supplier",
+        "label": "Supplier",
+        "comment": "An organisation that provides products.",
+    },
+]
+
+for cls in classes:
+    r = requests.post(
+        f"{BASE_URL}/ontologies/{ontology_id}/classes",
+        json=cls,
+        headers=HEADERS,
+    )
+    print(f"Added class: {r.json()['iri']}")
+```
+
+</CodeGroup>
+
+<Note>
+ANC Lab Knowledge Hub operates under **OWL DL** semantics by default. OWL DL guarantees decidable reasoning but imposes restrictions — for example, a resource cannot be both a class and an individual simultaneously, and property chains must be acyclic. If you need the full expressive power of OWL Full (e.g., treating classes as individuals), contact support to enable it, but be aware that automated reasoning results are no longer guaranteed to be complete.
+</Note>
+
+### Add Object Properties (Relationships)
+
+Object properties define how instances of one class relate to instances of another. Add `belongsTo` and `suppliedBy` to link products to their category and supplier.
+
+<CodeGroup>
+
+```bash curl
+# Product belongsTo Category
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/object-properties \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#belongsTo",
+    "label": "belongs to",
+    "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+    "range": "https://ontologies.anclab.io/ecommerce/v1#Category",
+    "characteristics": ["Functional"]
+  }'
+
+# Product suppliedBy Supplier
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/object-properties \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#suppliedBy",
+    "label": "supplied by",
+    "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+    "range": "https://ontologies.anclab.io/ecommerce/v1#Supplier"
+  }'
+```
+
+```python Python
+object_properties = [
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#belongsTo",
+        "label": "belongs to",
+        "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+        "range": "https://ontologies.anclab.io/ecommerce/v1#Category",
+        "characteristics": ["Functional"],
+    },
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#suppliedBy",
+        "label": "supplied by",
+        "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+        "range": "https://ontologies.anclab.io/ecommerce/v1#Supplier",
+    },
+]
+
+for prop in object_properties:
+    r = requests.post(
+        f"{BASE_URL}/ontologies/{ontology_id}/object-properties",
+        json=prop,
+        headers=HEADERS,
+    )
+    print(f"Added object property: {r.json()['iri']}")
+```
+
+</CodeGroup>
+
+### Add Data Properties (Attributes)
+
+Data properties link instances to literal values such as strings, numbers, and dates. Add the core attributes for each class.
+
+<CodeGroup>
+
+```bash curl
+# Product hasPrice
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/data-properties \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#hasPrice",
+    "label": "has price",
+    "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+    "range": "xsd:decimal",
+    "characteristics": ["Functional"]
+  }'
+
+# Product hasSKU
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/data-properties \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://ontologies.anclab.io/ecommerce/v1#hasSKU",
+    "label": "has SKU",
+    "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+    "range": "xsd:string",
+    "characteristics": ["Functional", "Key"]
+  }'
+```
+
+```python Python
+data_properties = [
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#hasName",
+        "label": "has name",
+        "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+        "range": "xsd:string",
+        "characteristics": ["Functional"],
+    },
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#hasPrice",
+        "label": "has price",
+        "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+        "range": "xsd:decimal",
+        "characteristics": ["Functional"],
+    },
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#hasSKU",
+        "label": "has SKU",
+        "domain": "https://ontologies.anclab.io/ecommerce/v1#Product",
+        "range": "xsd:string",
+        "characteristics": ["Functional", "Key"],
+    },
+    {
+        "iri": "https://ontologies.anclab.io/ecommerce/v1#hasEmail",
+        "label": "has email",
+        "domain": "https://ontologies.anclab.io/ecommerce/v1#Supplier",
+        "range": "xsd:string",
+    },
+]
+
+for prop in data_properties:
+    r = requests.post(
+        f"{BASE_URL}/ontologies/{ontology_id}/data-properties",
+        json=prop,
+        headers=HEADERS,
+    )
+    print(f"Added data property: {r.json()['iri']}")
+```
+
+</CodeGroup>
+
+### Define Axioms and Constraints (SHACL)
+
+SHACL (Shapes Constraint Language) lets you express data quality rules beyond what OWL semantics alone can enforce — for example, requiring that every `Product` has a SKU and a positive price. Post a SHACL shapes graph as a Turtle string.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/shapes \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "format": "turtle",
+    "shapes": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ec: <https://ontologies.anclab.io/ecommerce/v1#> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\nec:ProductShape\n  a sh:NodeShape ;\n  sh:targetClass ec:Product ;\n  sh:property [\n    sh:path ec:hasSKU ;\n    sh:minCount 1 ;\n    sh:maxCount 1 ;\n    sh:datatype xsd:string\n  ] ;\n  sh:property [\n    sh:path ec:hasPrice ;\n    sh:minCount 1 ;\n    sh:minInclusive 0.0 ;\n    sh:datatype xsd:decimal\n  ] ;\n  sh:property [\n    sh:path ec:belongsTo ;\n    sh:minCount 1 ;\n    sh:class ec:Category\n  ] ."
+  }'
+```
+
+```python Python
+shacl_shapes = """
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix ec:  <https://ontologies.anclab.io/ecommerce/v1#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ec:ProductShape
+  a sh:NodeShape ;
+  sh:targetClass ec:Product ;
+  sh:property [
+    sh:path     ec:hasSKU ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:string
+  ] ;
+  sh:property [
+    sh:path        ec:hasPrice ;
+    sh:minCount    1 ;
+    sh:minInclusive 0.0 ;
+    sh:datatype    xsd:decimal
+  ] ;
+  sh:property [
+    sh:path     ec:belongsTo ;
+    sh:minCount 1 ;
+    sh:class    ec:Category
+  ] .
+
+ec:SupplierShape
+  a sh:NodeShape ;
+  sh:targetClass ec:Supplier ;
+  sh:property [
+    sh:path     ec:hasName ;
+    sh:minCount 1 ;
+    sh:datatype xsd:string
+  ] .
+"""
+
+r = requests.post(
+    f"{BASE_URL}/ontologies/{ontology_id}/shapes",
+    json={"format": "turtle", "shapes": shacl_shapes},
+    headers=HEADERS,
+)
+print(f"Shapes uploaded: {r.json()['shapeCount']} shapes registered")
+```
+
+</CodeGroup>
+
+### Validate the Ontology
+
+Run the platform's built-in reasoner and SHACL validator to confirm your ontology is logically consistent and your shapes are well-formed.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/ontologies/ont_7x9kABcDef/validate \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "checks": ["consistency", "shacl", "dl-profile"] }'
+```
+
+```python Python
+r = requests.post(
+    f"{BASE_URL}/ontologies/{ontology_id}/validate",
+    json={"checks": ["consistency", "shacl", "dl-profile"]},
+    headers=HEADERS,
+)
+result = r.json()
+
+if result["consistent"]:
+    print("✓ Ontology is logically consistent")
+else:
+    print("✗ Inconsistencies found:")
+    for issue in result["issues"]:
+        print(f"  [{issue['severity']}] {issue['message']}")
+
+print(f"DL profile: {result['dlProfile']}")  # e.g. "OWL 2 DL"
+```
+
+</CodeGroup>
+
+A successful response looks like:
+
+```json
+{
+  "consistent": true,
+  "dlProfile": "OWL 2 DL",
+  "shaclConformant": true,
+  "issues": [],
+  "classCount": 3,
+  "objectPropertyCount": 2,
+  "dataPropertyCount": 4,
+  "shapeCount": 2
+}
+```
+
+</Steps>
+
+## Complete Turtle Representation
+
+Here is the full ontology produced by the steps above, in Turtle syntax. You can download this directly from the platform using `GET /ontologies/ont_7x9kABcDef?format=turtle`.
+
+```turtle
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix ec:   <https://ontologies.anclab.io/ecommerce/v1#> .
+
+# ── Ontology Declaration ──────────────────────────────────────────────────────
+
+<https://ontologies.anclab.io/ecommerce/v1>
+  a owl:Ontology ;
+  rdfs:label "E-Commerce Product Catalog Ontology" ;
+  rdfs:comment "Ontology for products, categories, and suppliers." .
+
+# ── Classes ───────────────────────────────────────────────────────────────────
+
+ec:Product
+  a owl:Class ;
+  rdfs:label "Product" ;
+  rdfs:comment "A tangible or digital item available for purchase." .
+
+ec:Category
+  a owl:Class ;
+  rdfs:label "Category" ;
+  rdfs:comment "A grouping of related products." .
+
+ec:Supplier
+  a owl:Class ;
+  rdfs:label "Supplier" ;
+  rdfs:comment "An organisation that provides products." .
+
+# ── Object Properties ─────────────────────────────────────────────────────────
+
+ec:belongsTo
+  a owl:ObjectProperty, owl:FunctionalProperty ;
+  rdfs:label "belongs to" ;
+  rdfs:domain ec:Product ;
+  rdfs:range  ec:Category .
+
+ec:suppliedBy
+  a owl:ObjectProperty ;
+  rdfs:label "supplied by" ;
+  rdfs:domain ec:Product ;
+  rdfs:range  ec:Supplier .
+
+# ── Data Properties ───────────────────────────────────────────────────────────
+
+ec:hasName
+  a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:label  "has name" ;
+  rdfs:domain ec:Product ;
+  rdfs:range  xsd:string .
+
+ec:hasPrice
+  a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:label  "has price" ;
+  rdfs:domain ec:Product ;
+  rdfs:range  xsd:decimal .
+
+ec:hasSKU
+  a owl:DatatypeProperty, owl:FunctionalProperty ;
+  rdfs:label  "has SKU" ;
+  rdfs:domain ec:Product ;
+  rdfs:range  xsd:string .
+
+ec:hasEmail
+  a owl:DatatypeProperty ;
+  rdfs:label  "has email" ;
+  rdfs:domain ec:Supplier ;
+  rdfs:range  xsd:string .
+```
+
+## Next Steps
+
+With your ontology published and validated, you're ready to build a knowledge graph on top of it. Continue to [Construct and Populate a Knowledge Graph](/guides/constructing-knowledge-graphs) to start loading data.

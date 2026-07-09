@@ -1,0 +1,329 @@
+---
+title: "Run Data Analytics Over Your Knowledge Graph"
+sidebarTitle: "Analytics Workflows"
+description: "Use the ANC Lab Knowledge Hub analytics API to profile entities, measure relationship density, trace paths, and extract subgraphs from your graph data."
+---
+
+Raw SPARQL queries return precise facts, but they can't easily answer higher-order questions like "which entities have the most connections?", "are there natural clusters in this data?", or "what is the shortest path between two suppliers?". The ANC Lab Knowledge Hub analytics API layers graph-analytic algorithms directly on top of your RDF data so you can answer those questions without exporting to a separate tool. This guide covers entity distribution analysis, relationship density, path analysis, subgraph extraction, and how to combine these calls into a reusable Python workflow.
+
+<Tip>
+For graphs with more than 500,000 triples, enable response caching by adding `?cache=true` to your analytics requests. The platform stores results for 15 minutes by default — long enough for dashboard refreshes but short enough to stay current. For very large result sets, use cursor-based pagination: check the `nextCursor` field in the response and pass it back as the `cursor` query parameter on the next call.
+</Tip>
+
+## Analytics Endpoint Overview
+
+All analytics operations use `GET /graphs/{graphId}/analytics` with a `type` parameter that selects the algorithm. Common parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `type` | Algorithm: `entity-distribution`, `relationship-density`, `path-analysis`, `subgraph`, `clustering` |
+| `class` | Filter by ontology class IRI |
+| `limit` | Maximum results to return (default 50, max 1000) |
+| `cursor` | Pagination cursor from a previous response |
+| `cache` | `true` to enable result caching |
+
+## Entity Distribution Analysis
+
+Count how many instances of each class exist in your graph. This is the fastest way to get a demographic overview of your data.
+
+<CodeGroup>
+
+```bash curl
+# Count entities across all classes
+curl "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics?type=entity-distribution" \
+  -H "Authorization: Bearer anchub_sk_..."
+
+# Count entities for a specific class
+curl "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics?type=entity-distribution&class=https%3A%2F%2Fontologies.anclab.io%2Fecommerce%2Fv1%23Product" \
+  -H "Authorization: Bearer anchub_sk_..."
+```
+
+```python Python
+import requests
+
+BASE_URL = "https://api.anclab.io/v1"
+GRAPH_ID  = "grph_3mNpQrStuv"
+HEADERS   = {"Authorization": "Bearer anchub_sk_..."}
+
+def get_analytics(params: dict) -> dict:
+    r = requests.get(
+        f"{BASE_URL}/graphs/{GRAPH_ID}/analytics",
+        params=params,
+        headers=HEADERS,
+    )
+    r.raise_for_status()
+    return r.json()
+
+distribution = get_analytics({"type": "entity-distribution"})
+
+print("Entity distribution:")
+for entry in distribution["data"]:
+    print(f"  {entry['className']:30s}  {entry['count']:>6} entities")
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "type": "entity-distribution",
+  "graphId": "grph_3mNpQrStuv",
+  "data": [
+    { "classIri": "https://ontologies.anclab.io/ecommerce/v1#Product",  "className": "Product",  "count": 312 },
+    { "classIri": "https://ontologies.anclab.io/ecommerce/v1#Category", "className": "Category", "count": 18  },
+    { "classIri": "https://ontologies.anclab.io/ecommerce/v1#Supplier", "className": "Supplier", "count": 27  }
+  ],
+  "total": 357,
+  "cached": false
+}
+```
+
+## Relationship Density
+
+Measure how heavily connected your entities are. The `relationship-density` algorithm returns the average out-degree (number of outgoing triples) per entity, broken down by predicate.
+
+<CodeGroup>
+
+```bash curl
+curl "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics?type=relationship-density&class=https%3A%2F%2Fontologies.anclab.io%2Fecommerce%2Fv1%23Product" \
+  -H "Authorization: Bearer anchub_sk_..."
+```
+
+```python Python
+density = get_analytics({
+    "type": "relationship-density",
+    "class": "https://ontologies.anclab.io/ecommerce/v1#Product",
+})
+
+print(f"Average degree: {density['averageDegree']}")
+for predicate in density["data"]:
+    print(f"  {predicate['predicateLabel']:20s}  avg {predicate['averageCount']:.2f}  total {predicate['totalCount']}")
+```
+
+</CodeGroup>
+
+## Most-Connected Entities
+
+Identify the entities with the highest degree (most incoming + outgoing triples) to find hubs in your graph.
+
+<CodeGroup>
+
+```bash curl
+curl "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics?type=relationship-density&orderBy=degree&limit=10" \
+  -H "Authorization: Bearer anchub_sk_..."
+```
+
+```python Python
+top_entities = get_analytics({
+    "type": "relationship-density",
+    "orderBy": "degree",
+    "limit": 10,
+})
+
+print("Top 10 most-connected entities:")
+for i, entity in enumerate(top_entities["data"], 1):
+    print(f"  {i:2d}. {entity['entityLabel']:30s}  degree={entity['degree']}")
+```
+
+</CodeGroup>
+
+## Path Analysis
+
+`path-analysis` finds the shortest or all simple paths between two entities, useful for understanding how two nodes are related through the graph.
+
+<CodeGroup>
+
+```bash curl
+curl -G "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics" \
+  -H "Authorization: Bearer anchub_sk_..." \
+  --data-urlencode "type=path-analysis" \
+  --data-urlencode "source=https://data.anclab.io/ecommerce/product/wireless-headphones-x200" \
+  --data-urlencode "target=https://data.anclab.io/ecommerce/supplier/acme-corp" \
+  -d "maxDepth=4"
+```
+
+```python Python
+paths = get_analytics({
+    "type": "path-analysis",
+    "source": "https://data.anclab.io/ecommerce/product/wireless-headphones-x200",
+    "target": "https://data.anclab.io/ecommerce/supplier/acme-corp",
+    "maxDepth": 4,
+})
+
+for path in paths["data"]:
+    steps = " → ".join(
+        f"{s['entityLabel']} [{s['predicateLabel']}]" for s in path["steps"]
+    )
+    print(f"Path (length {path['length']}): {steps}")
+```
+
+</CodeGroup>
+
+## Subgraph Extraction
+
+Extract a self-contained subgraph around a focal entity — all entities and triples within N hops. Use this to build neighbourhood visualisations or to export a slice of your graph.
+
+<CodeGroup>
+
+```bash curl
+curl -G "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics" \
+  -H "Authorization: Bearer anchub_sk_..." \
+  --data-urlencode "type=subgraph" \
+  --data-urlencode "focus=https://data.anclab.io/ecommerce/category/electronics" \
+  -d "depth=2" \
+  -d "format=jsonld"
+```
+
+```python Python
+subgraph = get_analytics({
+    "type": "subgraph",
+    "focus": "https://data.anclab.io/ecommerce/category/electronics",
+    "depth": 2,
+    "format": "jsonld",
+})
+
+print(f"Subgraph contains {subgraph['tripleCount']} triples "
+      f"and {subgraph['entityCount']} entities")
+```
+
+</CodeGroup>
+
+## Cluster Detection
+
+Detect densely-connected communities within your graph using the built-in Louvain clustering algorithm.
+
+<CodeGroup>
+
+```bash curl
+curl "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/analytics?type=clustering&algorithm=louvain" \
+  -H "Authorization: Bearer anchub_sk_..."
+```
+
+```python Python
+clusters = get_analytics({
+    "type": "clustering",
+    "algorithm": "louvain",
+})
+
+print(f"Detected {clusters['clusterCount']} clusters:")
+for cluster in clusters["data"]:
+    print(f"  Cluster {cluster['id']:3d}: {cluster['memberCount']:4d} members  "
+          f"density={cluster['density']:.3f}  "
+          f"label={cluster.get('dominantClass', '—')}")
+```
+
+</CodeGroup>
+
+## Full Analytics Workflow
+
+The following Python script combines SPARQL and the analytics API into a single diagnostic workflow — useful as a scheduled health check or a starting point for a data-quality dashboard.
+
+```python Python
+import requests
+from datetime import datetime
+
+BASE_URL = "https://api.anclab.io/v1"
+GRAPH_ID  = "grph_3mNpQrStuv"
+HEADERS   = {"Authorization": "Bearer anchub_sk_..."}
+
+
+def sparql_query(query: str) -> dict:
+    r = requests.post(
+        f"{BASE_URL}/graphs/{GRAPH_ID}/query",
+        data=query,
+        headers={**HEADERS, "Content-Type": "application/sparql-query"},
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def analytics(params: dict) -> dict:
+    r = requests.get(
+        f"{BASE_URL}/graphs/{GRAPH_ID}/analytics",
+        params={**params, "cache": "true"},
+        headers=HEADERS,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def run_graph_health_report() -> None:
+    print(f"\n{'='*60}")
+    print(f"  Graph Analytics Report — {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"{'='*60}\n")
+
+    # 1. Entity distribution
+    dist = analytics({"type": "entity-distribution"})
+    print("📊 Entity Distribution")
+    for entry in dist["data"]:
+        bar = "█" * min(entry["count"] // 10, 30)
+        print(f"   {entry['className']:15s} {entry['count']:5d}  {bar}")
+
+    # 2. Products missing a supplier (SPARQL)
+    no_supplier_query = """
+    PREFIX ec: <https://ontologies.anclab.io/ecommerce/v1#>
+    SELECT (COUNT(?p) AS ?count)
+    WHERE {
+      ?p a ec:Product .
+      FILTER NOT EXISTS { ?p ec:suppliedBy ?s . }
+    }
+    """
+    no_supplier = sparql_query(no_supplier_query)
+    count = no_supplier["results"]["bindings"][0]["count"]["value"]
+    print(f"\n⚠  Products with no supplier: {count}")
+
+    # 3. Most-connected entities
+    top = analytics({"type": "relationship-density", "orderBy": "degree", "limit": 5})
+    print("\n🔗 Top 5 Most-Connected Entities")
+    for i, e in enumerate(top["data"], 1):
+        print(f"   {i}. {e['entityLabel'][:40]:40s}  degree={e['degree']}")
+
+    # 4. Cluster overview
+    clusters = analytics({"type": "clustering", "algorithm": "louvain"})
+    print(f"\n🧩 Cluster Detection: {clusters['clusterCount']} clusters found")
+    for c in clusters["data"][:3]:
+        print(f"   Cluster {c['id']}: {c['memberCount']} members, "
+              f"density={c['density']:.3f}")
+
+    print("\n✅ Report complete.\n")
+
+
+if __name__ == "__main__":
+    run_graph_health_report()
+```
+
+## Paginating Large Results
+
+For analytics calls that return thousands of rows, use cursor-based pagination:
+
+```python Python
+def paginate_analytics(params: dict) -> list:
+    all_results = []
+    cursor = None
+
+    while True:
+        page_params = {**params, "limit": 200}
+        if cursor:
+            page_params["cursor"] = cursor
+
+        response = analytics(page_params)
+        all_results.extend(response["data"])
+
+        cursor = response.get("nextCursor")
+        if not cursor:
+            break
+
+    return all_results
+
+# Retrieve all entities sorted by degree, regardless of graph size
+all_entities = paginate_analytics({
+    "type": "relationship-density",
+    "orderBy": "degree",
+})
+print(f"Retrieved {len(all_entities)} entities in total")
+```
+
+## Next Steps
+
+Now that you can analyse your own graph, learn how to enrich it with data from external sources. Continue to [Integrate External Data Sources and Linked Data](/guides/integrating-external-data).

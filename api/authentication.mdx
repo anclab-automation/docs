@@ -1,0 +1,262 @@
+---
+title: "Authenticate API Requests with API Keys"
+sidebarTitle: "Authentication"
+description: "Learn how to create, scope, and revoke ANC Lab API keys, and include them correctly in every REST API request you make."
+---
+
+Every request to the ANC Lab REST API must be authenticated with an API key. Keys are long-lived bearer tokens that you generate from the ANC Lab dashboard or programmatically via the `/auth/keys` endpoint. Each key carries one or more **scopes** that determine which operations it may perform, so you can issue tightly scoped keys for individual services or CI pipelines without granting unnecessary access.
+
+## Obtain an API Key
+
+1. Sign in to the [ANC Lab dashboard](https://app.anclab.io).
+2. Navigate to **Settings → API Keys**.
+3. Click **New API Key**, give it a descriptive name, select the required scopes, and optionally set an expiry date.
+4. Copy the key immediately — it is displayed only once.
+
+<Warning>
+  Store your API key in an environment variable or a secrets manager such as HashiCorp Vault or AWS Secrets Manager. Never hardcode it in source files, commit it to version control, or expose it in client-side JavaScript. If a key is compromised, revoke it immediately and rotate any dependent integrations.
+</Warning>
+
+## Include the Key in Requests
+
+Pass the key as a bearer token in the `Authorization` header of every request:
+
+```
+Authorization: Bearer anchub_sk_...
+```
+
+<CodeGroup>
+
+```bash curl
+curl https://api.anclab.io/v1/ontologies \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Accept: application/json"
+```
+
+```python Python
+import os
+import requests
+
+API_KEY = os.environ["ANCHUB_API_KEY"]  # never hardcode this
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+response = requests.get("https://api.anclab.io/v1/ontologies", headers=headers)
+response.raise_for_status()
+print(response.json())
+```
+
+</CodeGroup>
+
+## API Key Scopes
+
+Scopes follow a `resource:action` naming convention. Assign the minimum scopes required for each integration.
+
+| Scope | Grants access to |
+|---|---|
+| `ontologies:read` | `GET` requests on `/ontologies` and sub-resources |
+| `ontologies:write` | `POST`, `PUT`, `DELETE` on `/ontologies` |
+| `graphs:read` | `GET` requests on `/graphs` and sub-resources |
+| `graphs:write` | `POST`, `DELETE` on `/graphs`, triples, import, and inference |
+| `query:execute` | `POST /query` and `POST /query/explain` |
+| `analytics:read` | `GET /analytics` and all analytics sub-resources |
+| `analytics:write` | `POST` on `/analytics/reports` |
+| `admin` | Full access to all endpoints including key management |
+
+<Tip>
+  Use separate keys for read-only dashboards and write-capable ingestion pipelines. This limits blast radius if a key is accidentally exposed.
+</Tip>
+
+## Key Rotation Best Practices
+
+<Note>
+  Rotate API keys at least every 90 days in production environments. Create the replacement key before revoking the old one so your services can transition without downtime. Use the `expires_at` field to enforce automatic expiry on short-lived keys used in ephemeral build environments.
+</Note>
+
+---
+
+## Manage API Keys via the API
+
+Use the following endpoints to manage keys programmatically. These endpoints require an existing key with the `admin` scope.
+
+### Create an API Key
+
+```
+POST /auth/keys
+```
+
+#### Request Body
+
+<ParamField body="name" type="string" required>
+  A human-readable label for the key. Use descriptive names like `ci-pipeline-prod` or `analytics-dashboard` to identify keys in the dashboard.
+</ParamField>
+
+<ParamField body="scopes" type="array" required>
+  An array of scope strings that define what the key may access. Must contain at least one scope. Example: `["ontologies:read", "graphs:read", "query:execute"]`.
+</ParamField>
+
+<ParamField body="expires_at" type="string">
+  An ISO 8601 datetime string after which the key is automatically invalidated. Omit to create a non-expiring key. Example: `"2026-01-01T00:00:00Z"`.
+</ParamField>
+
+#### Example Request
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/auth/keys \
+  -H "Authorization: Bearer anchub_sk_live_ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ci-pipeline-prod",
+    "scopes": ["ontologies:read", "graphs:write", "query:execute"],
+    "expires_at": "2026-06-01T00:00:00Z"
+  }'
+```
+
+```python Python
+import os, requests
+
+headers = {
+    "Authorization": f"Bearer {os.environ['ANCHUB_ADMIN_KEY']}",
+    "Content-Type": "application/json",
+}
+
+payload = {
+    "name": "ci-pipeline-prod",
+    "scopes": ["ontologies:read", "graphs:write", "query:execute"],
+    "expires_at": "2026-06-01T00:00:00Z",
+}
+
+resp = requests.post("https://api.anclab.io/v1/auth/keys", json=payload, headers=headers)
+resp.raise_for_status()
+new_key = resp.json()
+print("Save this key now — it will not be shown again:", new_key["data"]["key"])
+```
+
+</CodeGroup>
+
+#### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique identifier for the API key record. Use this ID to revoke the key later.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The descriptive label you provided at creation time.
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  The raw API key value prefixed with `anchub_sk_`. **This field is only present in the creation response.** Subsequent calls to `GET /auth/keys` will not return the raw key value.
+</ResponseField>
+
+<ResponseField name="scopes" type="array">
+  The list of scope strings assigned to this key.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the key was created.
+</ResponseField>
+
+<ResponseField name="expires_at" type="string">
+  ISO 8601 timestamp of key expiry, or `null` if the key never expires.
+</ResponseField>
+
+#### Example Response
+
+```json
+{
+  "data": {
+    "id": "key_01H9Z2XW4MNTQ8YBVKPF3RSCD",
+    "name": "ci-pipeline-prod",
+    "key": "anchub_sk_live_Kx9mRpQ2sNvB7cWdYeAf4LjUoI3TgHnZ",
+    "scopes": ["ontologies:read", "graphs:write", "query:execute"],
+    "created_at": "2025-04-10T08:30:00Z",
+    "expires_at": "2026-06-01T00:00:00Z"
+  }
+}
+```
+
+---
+
+### List API Keys
+
+```
+GET /auth/keys
+```
+
+Returns all API keys for your organisation. The raw `key` value is **never** returned in list responses — only metadata is shown.
+
+#### Example Request
+
+```bash curl
+curl https://api.anclab.io/v1/auth/keys \
+  -H "Authorization: Bearer anchub_sk_live_ADMIN_KEY"
+```
+
+#### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "key_01H9Z2XW4MNTQ8YBVKPF3RSCD",
+      "name": "ci-pipeline-prod",
+      "scopes": ["ontologies:read", "graphs:write", "query:execute"],
+      "created_at": "2025-04-10T08:30:00Z",
+      "expires_at": "2026-06-01T00:00:00Z"
+    },
+    {
+      "id": "key_02J1A4PL9KRWX7ZDNMTH5UEQB",
+      "name": "analytics-dashboard",
+      "scopes": ["analytics:read", "query:execute"],
+      "created_at": "2025-03-22T14:15:00Z",
+      "expires_at": null
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 2,
+    "total_pages": 1
+  }
+}
+```
+
+---
+
+### Revoke an API Key
+
+```
+DELETE /auth/keys/{key_id}
+```
+
+Revokes the specified key immediately. All subsequent requests using that key will receive `401 Unauthorized`.
+
+#### Path Parameter
+
+<ParamField path="key_id" type="string" required>
+  The unique ID of the key to revoke. Retrieve this from `GET /auth/keys`.
+</ParamField>
+
+#### Example Request
+
+```bash curl
+curl -X DELETE https://api.anclab.io/v1/auth/keys/key_01H9Z2XW4MNTQ8YBVKPF3RSCD \
+  -H "Authorization: Bearer anchub_sk_live_ADMIN_KEY"
+```
+
+#### Example Response
+
+```json
+{
+  "data": {
+    "id": "key_01H9Z2XW4MNTQ8YBVKPF3RSCD",
+    "revoked": true,
+    "revoked_at": "2025-04-15T09:00:00Z"
+  }
+}
+```

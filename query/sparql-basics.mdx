@@ -1,0 +1,418 @@
+---
+title: "SPARQL Query Language: Syntax and Patterns"
+sidebarTitle: "SPARQL Basics"
+description: "Learn SPARQL 1.1 syntax, query forms, filters, aggregates, and how to execute queries against the ANC Lab Knowledge Hub API."
+---
+
+SPARQL (SPARQL Protocol and RDF Query Language) is the W3C-standard query language for RDF knowledge graphs. Whether you want to retrieve specific facts, compute statistics, or transform graph data into new shapes, SPARQL gives you precise, declarative control over your graph. This page walks you through every major feature of SPARQL 1.1 — from basic triple patterns to aggregates and updates — with runnable examples you can adapt to your own graphs.
+
+## Core Concepts
+
+Every SPARQL query operates on a set of RDF triples. A triple has three components: a **subject**, a **predicate**, and an **object**. You query by writing *triple patterns* that use variables (prefixed with `?`) in place of the parts you want to find.
+
+### PREFIX Declarations
+
+Declare namespace prefixes at the top of every query to keep your predicates readable and avoid writing long IRIs repeatedly.
+
+```sparql
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX owl:  <http://www.w3.org/2002/07/owl#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+PREFIX ex:   <https://data.anclab.io/example#>
+```
+
+### Triple Patterns
+
+A triple pattern matches any triple in the graph where the IRIs and literals you specify align with what is stored. Use `?variable` for any component you want SPARQL to bind.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?person ?name
+WHERE {
+  ?person rdf:type  ex:Person .
+  ?person ex:name   ?name .
+}
+```
+
+This query returns every `ex:Person` node together with its `ex:name` value.
+
+---
+
+## Query Forms
+
+SPARQL 1.1 provides four query forms, each suited to a different task.
+
+<Tabs>
+  <Tab title="SELECT">
+    `SELECT` returns a table of variable bindings — the most common form for retrieving data.
+
+    ```sparql
+    PREFIX ex: <https://data.anclab.io/example#>
+
+    SELECT ?product ?price
+    WHERE {
+      ?product rdf:type  ex:Product ;
+               ex:price  ?price .
+      FILTER (?price < 100)
+    }
+    ORDER BY ASC(?price)
+    LIMIT 20
+    ```
+  </Tab>
+  <Tab title="CONSTRUCT">
+    `CONSTRUCT` builds a new RDF graph from the matched data — useful for data transformation and export.
+
+    ```sparql
+    PREFIX ex:    <https://data.anclab.io/example#>
+    PREFIX schema: <https://schema.org/>
+
+    CONSTRUCT {
+      ?product schema:name   ?name ;
+               schema:price  ?price .
+    }
+    WHERE {
+      ?product rdf:type  ex:Product ;
+               ex:name   ?name ;
+               ex:price  ?price .
+      FILTER (?price < 100)
+    }
+    ```
+
+    The result is a Turtle/RDF document instead of a result table, ready to be loaded into another system.
+  </Tab>
+  <Tab title="ASK">
+    `ASK` returns a boolean — `true` if the pattern matches at least once, `false` otherwise.
+
+    ```sparql
+    PREFIX ex: <https://data.anclab.io/example#>
+
+    ASK {
+      ex:ProductX ex:inStock true .
+    }
+    ```
+  </Tab>
+  <Tab title="DESCRIBE">
+    `DESCRIBE` returns all triples the endpoint considers relevant for the given resource — a quick way to explore an unknown node.
+
+    ```sparql
+    PREFIX ex: <https://data.anclab.io/example#>
+
+    DESCRIBE ex:ProductX
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## WHERE Clause Patterns
+
+### FILTER
+
+Use `FILTER` to restrict results with boolean conditions. You can use comparison operators, string functions, date functions, and more.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?employee ?salary
+WHERE {
+  ?employee rdf:type   ex:Employee ;
+            ex:salary  ?salary ;
+            ex:dept    ?dept .
+  FILTER (?salary > 50000 && CONTAINS(STR(?dept), "Engineering"))
+}
+```
+
+### OPTIONAL
+
+`OPTIONAL` lets you include data that may or may not be present — equivalent to a LEFT JOIN in SQL. Variables inside `OPTIONAL` are unbound if no match is found.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?person ?name ?email
+WHERE {
+  ?person rdf:type  ex:Person ;
+          ex:name   ?name .
+  OPTIONAL { ?person ex:email ?email }
+}
+```
+
+### UNION
+
+`UNION` combines results from two or more alternative patterns. Any result that matches either branch is included.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?entity ?label
+WHERE {
+  { ?entity rdf:type ex:Product ; rdfs:label ?label }
+  UNION
+  { ?entity rdf:type ex:Service ; rdfs:label ?label }
+}
+```
+
+<Tip>
+  Add `DISTINCT` immediately after `SELECT` (`SELECT DISTINCT ?entity ?label`) whenever your query uses `UNION` or traverses multiple paths — duplicate rows are common and `DISTINCT` removes them in one step.
+</Tip>
+
+---
+
+## Sorting and Pagination
+
+Chain `ORDER BY`, `LIMIT`, and `OFFSET` at the end of any `SELECT` query to sort and page through large result sets.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?article ?date ?title
+WHERE {
+  ?article rdf:type    ex:Article ;
+           ex:pubDate  ?date ;
+           ex:title    ?title .
+}
+ORDER BY DESC(?date)
+LIMIT  10
+OFFSET 20
+```
+
+This returns articles 21–30 sorted from newest to oldest.
+
+---
+
+## Aggregates and GROUP BY
+
+SPARQL 1.1 supports the full set of SQL-style aggregates: `COUNT`, `SUM`, `AVG`, `MIN`, and `MAX`. Pair them with `GROUP BY` to compute per-group statistics, and use `HAVING` to filter groups after aggregation.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?category (COUNT(?product) AS ?total) (AVG(?price) AS ?avgPrice)
+WHERE {
+  ?product rdf:type    ex:Product ;
+           ex:category ?category ;
+           ex:price    ?price .
+}
+GROUP BY ?category
+HAVING (COUNT(?product) > 5)
+ORDER BY DESC(?avgPrice)
+```
+
+| Aggregate | Description                          |
+| --------- | ------------------------------------ |
+| `COUNT`   | Number of non-null values            |
+| `SUM`     | Sum of numeric values                |
+| `AVG`     | Arithmetic mean of numeric values    |
+| `MIN`     | Smallest value (numeric or lexical)  |
+| `MAX`     | Largest value (numeric or lexical)   |
+
+---
+
+## Executing Queries via the API
+
+Send your SPARQL query as the raw request body to the `/query` endpoint. Set `Content-Type` to `application/sparql-query` and choose your desired response format with `Accept`.
+
+### Endpoint
+
+```
+POST https://api.anclab.io/v1/query
+```
+
+### Request
+
+```http
+POST /v1/query HTTP/1.1
+Host: api.anclab.io
+Authorization: Bearer anchub_sk_••••••••••••••••
+Content-Type: application/sparql-query
+Accept: application/sparql-results+json
+
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?product ?name ?price
+WHERE {
+  ?product rdf:type  ex:Product ;
+           ex:name   ?name ;
+           ex:price  ?price .
+  FILTER (?price < 50)
+}
+ORDER BY ASC(?price)
+LIMIT 5
+```
+
+### Response
+
+```json
+{
+  "head": {
+    "vars": ["product", "name", "price"]
+  },
+  "results": {
+    "bindings": [
+      {
+        "product": { "type": "uri",     "value": "https://data.anclab.io/example#prod-042" },
+        "name":    { "type": "literal", "value": "Compact Sensor Module" },
+        "price":   { "type": "literal", "value": "19.99",
+                     "datatype": "http://www.w3.org/2001/XMLSchema#decimal" }
+      },
+      {
+        "product": { "type": "uri",     "value": "https://data.anclab.io/example#prod-107" },
+        "name":    { "type": "literal", "value": "Edge Connector Kit" },
+        "price":   { "type": "literal", "value": "34.50",
+                     "datatype": "http://www.w3.org/2001/XMLSchema#decimal" }
+      }
+    ]
+  }
+}
+```
+
+You can also scope a query to a specific named graph by adding a `graph` query parameter:
+
+```
+POST https://api.anclab.io/v1/query?graph=https%3A%2F%2Fdata.anclab.io%2Fgraphs%2Finventory
+```
+
+<Warning>
+  Complex queries — especially those involving unbounded property paths, large `UNION` blocks, or missing `LIMIT` clauses — can exceed the default **30-second timeout** and return a `408 Request Timeout`. Always add `LIMIT` during development and optimize with selective `FILTER` expressions before running against production graphs.
+</Warning>
+
+---
+
+## Accepting Different Response Formats
+
+Change the `Accept` header to receive results in other standard formats:
+
+| Accept Header                        | Format                        |
+| ------------------------------------ | ----------------------------- |
+| `application/sparql-results+json`    | SPARQL Results JSON (default) |
+| `application/sparql-results+xml`     | SPARQL Results XML            |
+| `text/csv`                           | Comma-separated values        |
+| `text/tab-separated-values`          | Tab-separated values          |
+| `text/turtle`                        | Turtle RDF (CONSTRUCT only)   |
+| `application/ld+json`                | JSON-LD (CONSTRUCT only)      |
+
+---
+
+## SPARQL Update
+
+SPARQL Update lets you modify graph data without leaving the SPARQL ecosystem. The endpoint is the same `/query` route; set `Content-Type: application/sparql-update`.
+
+### INSERT DATA
+
+Add one or more triples directly into a named graph.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+INSERT DATA {
+  GRAPH <https://data.anclab.io/graphs/inventory> {
+    ex:prod-999 rdf:type    ex:Product ;
+                ex:name     "Thermal Actuator v2" ;
+                ex:price    "79.00"^^xsd:decimal ;
+                ex:inStock  true .
+  }
+}
+```
+
+### DELETE DATA
+
+Remove specific triples you know exactly.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+DELETE DATA {
+  GRAPH <https://data.anclab.io/graphs/inventory> {
+    ex:prod-042 ex:price "19.99"^^xsd:decimal .
+  }
+}
+```
+
+### DELETE / INSERT WHERE
+
+Match a pattern, delete the matched triples, and insert new ones — the SPARQL equivalent of an UPDATE statement.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+DELETE {
+  GRAPH <https://data.anclab.io/graphs/inventory> {
+    ?product ex:price ?oldPrice .
+  }
+}
+INSERT {
+  GRAPH <https://data.anclab.io/graphs/inventory> {
+    ?product ex:price ?newPrice .
+  }
+}
+WHERE {
+  GRAPH <https://data.anclab.io/graphs/inventory> {
+    ?product rdf:type  ex:Product ;
+             ex:price  ?oldPrice .
+    BIND (?oldPrice * 1.05 AS ?newPrice)
+  }
+}
+```
+
+This applies a 5% price increase to every product in one atomic operation.
+
+<AccordionGroup>
+  <Accordion title="Common SPARQL Filter Functions">
+    | Function                    | Description                                      |
+    | --------------------------- | ------------------------------------------------ |
+    | `STR(?x)`                   | Returns the string form of a term                |
+    | `LANG(?x)`                  | Returns the language tag of a literal            |
+    | `DATATYPE(?x)`              | Returns the datatype IRI of a typed literal      |
+    | `BOUND(?x)`                 | True if the variable is bound                    |
+    | `isIRI(?x)`                 | True if the term is an IRI                       |
+    | `isLITERAL(?x)`             | True if the term is a literal                    |
+    | `CONTAINS(str, substr)`     | True if `str` contains `substr`                  |
+    | `STRSTARTS(str, prefix)`    | True if `str` starts with `prefix`               |
+    | `REGEX(str, pattern)`       | True if `str` matches the regular expression     |
+    | `NOW()`                     | Returns the current date-time                    |
+    | `YEAR(?date)`               | Extracts the year from a date/dateTime literal   |
+    | `COALESCE(?a, ?b, …)`       | Returns the first bound value from the list      |
+  </Accordion>
+  <Accordion title="Shorthand Triple Patterns">
+    SPARQL supports two shorthand notations to reduce repetition:
+
+    - **Predicate-object lists** — use `;` to share a subject across multiple predicate-object pairs.
+    - **Object lists** — use `,` to share a subject and predicate across multiple objects.
+
+    ```sparql
+    # Predicate-object list (same subject)
+    ?product ex:name ?name ;
+             ex:price ?price ;
+             ex:category ?cat .
+
+    # Object list (same subject and predicate)
+    ?person ex:interest ex:Ontology, ex:SemanticWeb, ex:DataScience .
+    ```
+  </Accordion>
+  <Accordion title="Named Graphs and the FROM Clause">
+    Scope your query to one or more specific named graphs using `FROM` or `FROM NAMED`:
+
+    ```sparql
+    SELECT ?s ?p ?o
+    FROM <https://data.anclab.io/graphs/products>
+    FROM <https://data.anclab.io/graphs/inventory>
+    WHERE {
+      ?s ?p ?o .
+    }
+    ```
+
+    Use `GRAPH ?g { … }` inside `WHERE` to also bind the graph name:
+
+    ```sparql
+    SELECT ?g ?product ?name
+    WHERE {
+      GRAPH ?g {
+        ?product rdf:type ex:Product ;
+                 ex:name  ?name .
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,350 @@
+---
+title: "Graph Traversal: Navigating Paths and Relationships"
+sidebarTitle: "Graph Traversal"
+description: "Use SPARQL 1.1 property paths and the ANC Lab traversal API to navigate hierarchies, find ancestors, and explore multi-hop relationships."
+---
+
+Graphs derive their power from the connections between nodes, and traversing those connections is one of the most common and rewarding tasks in knowledge graph work. SPARQL 1.1 property path expressions let you follow chains of predicates in a single query — crossing class hierarchies, dependency trees, and social networks — without writing recursive code. For heavier workloads, the ANC Lab Knowledge Hub also exposes a dedicated graph traversal API endpoint that handles deep, parameterized exploration with built-in performance controls.
+
+## Property Path Syntax
+
+A property path replaces a single predicate in a triple pattern. Write the path expression between the subject and the object in curly braces:
+
+```sparql
+?subject <path-expression> ?object .
+```
+
+The table below summarizes all path operators available in SPARQL 1.1.
+
+| Operator | Syntax              | Meaning                                        |
+| -------- | ------------------- | ---------------------------------------------- |
+| Sequence | `a/b`               | Follow `a`, then `b`                           |
+| Alternative | `a\|b`           | Follow `a` or `b`                              |
+| Zero or more | `a*`           | Follow `a` any number of times (including zero) |
+| One or more | `a+`            | Follow `a` at least once                       |
+| Zero or one | `a?`            | Optionally follow `a` once                     |
+| Inverse | `^a`               | Follow `a` in reverse (object → subject)       |
+| Negation | `!(a\|b)`          | Follow any predicate **except** `a` or `b`     |
+
+Combine operators freely using parentheses: `(ex:partOf|ex:componentOf)+` matches one or more steps along either predicate.
+
+---
+
+## Practical Traversal Examples
+
+### 1. Find All Ancestors of a Class
+
+Use `rdfs:subClassOf*` to walk the class hierarchy upward from any starting class. The `*` operator matches zero or more hops, so the starting class itself is always included.
+
+```sparql
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX ex:   <https://data.anclab.io/example#>
+
+SELECT ?ancestor
+WHERE {
+  ex:ElectricVehicle rdfs:subClassOf* ?ancestor .
+}
+ORDER BY ?ancestor
+```
+
+To find only **strict** ancestors (excluding the class itself), switch to `rdfs:subClassOf+`.
+
+```sparql
+SELECT ?ancestor
+WHERE {
+  ex:ElectricVehicle rdfs:subClassOf+ ?ancestor .
+}
+```
+
+<Tip>
+  Scope long-running hierarchy traversals to a specific named graph by adding `GRAPH <your-graph-iri> { … }` inside the `WHERE` clause. This tells the engine to skip irrelevant partitions and can cut execution time dramatically on large multi-graph stores.
+</Tip>
+
+### 2. Find All Instances in a Class Hierarchy
+
+Combine `rdfs:subClassOf*` with `rdf:type` in a sequence path to retrieve every instance anywhere in the hierarchy — even if it is typed to a subclass rather than the top-level class.
+
+```sparql
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX ex:   <https://data.anclab.io/example#>
+
+SELECT DISTINCT ?vehicle ?label
+WHERE {
+  ?vehicle rdf:type/rdfs:subClassOf* ex:Vehicle ;
+           rdfs:label ?label .
+}
+ORDER BY ?label
+```
+
+The path `rdf:type/rdfs:subClassOf*` first follows `rdf:type` from `?vehicle`, then follows `rdfs:subClassOf` zero or more times upward, and checks whether the resulting class is `ex:Vehicle`.
+
+### 3. Traverse a Category Hierarchy
+
+Navigate a multi-level product taxonomy and return all products that belong to a given top-level category — regardless of nesting depth.
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?product ?productName ?leafCategory
+WHERE {
+  ?leafCategory ex:isSubCategoryOf* ex:Electronics .
+  ?product      ex:belongsToCategory ?leafCategory ;
+                ex:name              ?productName .
+}
+ORDER BY ?leafCategory ?productName
+```
+
+### 4. Follow Bidirectional Relationships
+
+Use the inverse operator `^` when a relationship is stored in only one direction but you need to traverse it both ways. Here, `ex:manages` connects a manager to a report, but you can ask "who manages this person?" by inverting:
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT ?manager
+WHERE {
+  ?manager ex:manages ex:EmployeeZara .
+}
+
+-- Equivalent using inverse path from the other end:
+SELECT ?manager
+WHERE {
+  ex:EmployeeZara ^ex:manages ?manager .
+}
+```
+
+Combine forward and inverse paths to find all colleagues within two hops regardless of direction:
+
+```sparql
+SELECT DISTINCT ?colleague
+WHERE {
+  ex:EmployeeZara (ex:manages|^ex:manages){1,2} ?colleague .
+  FILTER (?colleague != ex:EmployeeZara)
+}
+```
+
+### 5. Find All Entities Reachable Within N Hops
+
+Use the alternative path operator with a bounded repetition range to explore a neighborhood without exploding the result set. This query finds everything reachable from a seed entity within exactly 3 hops along any predicate that is not `rdf:type` or `rdfs:label`:
+
+```sparql
+PREFIX ex: <https://data.anclab.io/example#>
+
+SELECT DISTINCT ?reached
+WHERE {
+  ex:SensorNode42 !(rdf:type|rdfs:label){1,3} ?reached .
+}
+LIMIT 500
+```
+
+<Warning>
+  Deep traversals — especially with `*` or `+` over dense, highly-connected graphs — can consume significant memory and CPU. Always set a `max_depth` parameter in the traversal API, or use a bounded range like `{1,5}` in SPARQL paths. Start small and increase depth only if your results confirm you need it.
+</Warning>
+
+---
+
+## Sending Traversal Queries to the Query API
+
+You can run any property-path SPARQL query against the standard query endpoint:
+
+```http
+POST /v1/query HTTP/1.1
+Host: api.anclab.io
+Authorization: Bearer anchub_sk_••••••••••••••••
+Content-Type: application/sparql-query
+Accept: application/sparql-results+json
+
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX ex:   <https://data.anclab.io/example#>
+
+SELECT DISTINCT ?ancestor
+WHERE {
+  ex:ElectricVehicle rdfs:subClassOf+ ?ancestor .
+}
+ORDER BY ?ancestor
+```
+
+**Response:**
+
+```json
+{
+  "head": { "vars": ["ancestor"] },
+  "results": {
+    "bindings": [
+      { "ancestor": { "type": "uri", "value": "https://data.anclab.io/example#Vehicle" } },
+      { "ancestor": { "type": "uri", "value": "https://data.anclab.io/example#TransportAsset" } },
+      { "ancestor": { "type": "uri", "value": "http://www.w3.org/2002/07/owl#Thing" } }
+    ]
+  }
+}
+```
+
+---
+
+## Dedicated Graph Traversal API
+
+For parameterized, performance-optimized traversal — especially in applications that need path data, hop counts, or incremental exploration — use the dedicated traversal endpoint.
+
+### Endpoint
+
+```
+POST https://api.anclab.io/v1/graphs/{id}/traverse
+```
+
+Replace `{id}` with the URL-encoded IRI or the internal UUID of your graph.
+
+### Request Body
+
+```json
+{
+  "start_entity":        "https://data.anclab.io/example#SensorNode42",
+  "direction":           "outbound",
+  "max_depth":           4,
+  "relationship_types":  ["ex:connectedTo", "ex:partOf", "ex:feeds"],
+  "include_path":        true,
+  "limit":               200
+}
+```
+
+| Parameter            | Type            | Description                                                            |
+| -------------------- | --------------- | ---------------------------------------------------------------------- |
+| `start_entity`       | string (IRI)    | The IRI of the node to start from                                      |
+| `direction`          | string          | `"outbound"`, `"inbound"`, or `"both"`                                 |
+| `max_depth`          | integer         | Maximum number of hops to follow (default: `3`, max: `10`)             |
+| `relationship_types` | array of strings | Restrict traversal to these predicate IRIs; omit to allow all          |
+| `include_path`       | boolean         | When `true`, each result includes the full hop-by-hop path             |
+| `limit`              | integer         | Maximum number of reached nodes to return (default: `100`, max: `500`) |
+
+### Full Request Example
+
+```http
+POST /v1/graphs/g-7f3a2c1d/traverse HTTP/1.1
+Host: api.anclab.io
+Authorization: Bearer anchub_sk_••••••••••••••••
+Content-Type: application/json
+Accept: application/json
+
+{
+  "start_entity":       "https://data.anclab.io/example#SensorNode42",
+  "direction":          "outbound",
+  "max_depth":          3,
+  "relationship_types": [
+    "https://data.anclab.io/example#connectedTo",
+    "https://data.anclab.io/example#feeds"
+  ],
+  "include_path": true,
+  "limit": 50
+}
+```
+
+### Response
+
+```json
+{
+  "start_entity": "https://data.anclab.io/example#SensorNode42",
+  "graph_id":     "g-7f3a2c1d",
+  "total_reached": 3,
+  "nodes": [
+    {
+      "entity":  "https://data.anclab.io/example#GatewayUnit9",
+      "depth":   1,
+      "path": [
+        {
+          "from":      "https://data.anclab.io/example#SensorNode42",
+          "predicate": "https://data.anclab.io/example#connectedTo",
+          "to":        "https://data.anclab.io/example#GatewayUnit9"
+        }
+      ]
+    },
+    {
+      "entity":  "https://data.anclab.io/example#DataAggregator3",
+      "depth":   2,
+      "path": [
+        {
+          "from":      "https://data.anclab.io/example#SensorNode42",
+          "predicate": "https://data.anclab.io/example#connectedTo",
+          "to":        "https://data.anclab.io/example#GatewayUnit9"
+        },
+        {
+          "from":      "https://data.anclab.io/example#GatewayUnit9",
+          "predicate": "https://data.anclab.io/example#feeds",
+          "to":        "https://data.anclab.io/example#DataAggregator3"
+        }
+      ]
+    },
+    {
+      "entity":  "https://data.anclab.io/example#AnalyticsDashboard1",
+      "depth":   3,
+      "path": [
+        {
+          "from":      "https://data.anclab.io/example#SensorNode42",
+          "predicate": "https://data.anclab.io/example#connectedTo",
+          "to":        "https://data.anclab.io/example#GatewayUnit9"
+        },
+        {
+          "from":      "https://data.anclab.io/example#GatewayUnit9",
+          "predicate": "https://data.anclab.io/example#feeds",
+          "to":        "https://data.anclab.io/example#DataAggregator3"
+        },
+        {
+          "from":      "https://data.anclab.io/example#DataAggregator3",
+          "predicate": "https://data.anclab.io/example#feeds",
+          "to":        "https://data.anclab.io/example#AnalyticsDashboard1"
+        }
+      ]
+    }
+  ]
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Inbound Traversal: Finding What Points to a Node">
+    Set `"direction": "inbound"` to reverse the traversal direction — useful for finding all nodes that reference a given entity, such as all classes that directly or indirectly extend a base class.
+
+    ```json
+    {
+      "start_entity": "https://data.anclab.io/example#Vehicle",
+      "direction":    "inbound",
+      "max_depth":    5,
+      "relationship_types": [
+        "http://www.w3.org/2000/01/rdf-schema#subClassOf"
+      ],
+      "include_path": false
+    }
+    ```
+  </Accordion>
+  <Accordion title="Bidirectional Traversal: Exploring Undirected Relationships">
+    Use `"direction": "both"` when the underlying relationship is semantically undirected — for example, co-authorship, adjacency, or similarity links. The engine follows each predicate in both directions and deduplicates visited nodes.
+
+    ```json
+    {
+      "start_entity":       "https://data.anclab.io/example#Author17",
+      "direction":          "both",
+      "max_depth":          2,
+      "relationship_types": ["https://data.anclab.io/example#coAuthoredWith"],
+      "include_path":       true,
+      "limit":              100
+    }
+    ```
+  </Accordion>
+  <Accordion title="Checking Traversal Status for Long-Running Jobs">
+    For very large graphs, the traversal API can return a job reference instead of an immediate result. Poll the job status endpoint until the state is `"complete"`:
+
+    ```http
+    GET /v1/jobs/trv-8d2a91fc HTTP/1.1
+    Host: api.anclab.io
+    Authorization: Bearer anchub_sk_••••••••••••••••
+    ```
+
+    ```json
+    {
+      "job_id":  "trv-8d2a91fc",
+      "status":  "complete",
+      "result_url": "https://api.anclab.io/v1/jobs/trv-8d2a91fc/result"
+    }
+    ```
+
+    Fetch the full result from `result_url`.
+  </Accordion>
+</AccordionGroup>

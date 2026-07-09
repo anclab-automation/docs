@@ -1,0 +1,363 @@
+---
+title: "Query API: Execute SPARQL Against Your Graphs"
+sidebarTitle: "Query"
+description: "Run SPARQL SELECT, CONSTRUCT, and UPDATE queries against ANC Lab knowledge graphs, explain execution plans, and review query history via the REST API."
+---
+
+The Query API gives you a single endpoint to execute any SPARQL 1.1 query or update against your knowledge graphs. Submit queries as a JSON body or as a raw SPARQL string — the API accepts both. You can target a specific graph or fan out across all graphs in your workspace in a single call. Results are returned in standard SPARQL JSON, XML, or CSV formats so they slot directly into existing tooling.
+
+---
+
+## Execute a SPARQL Query
+
+```
+POST /query
+```
+
+Executes a SPARQL 1.1 SELECT, CONSTRUCT, ASK, or UPDATE operation.
+
+### Request Headers
+
+<ParamField header="Content-Type" type="string">
+  Use `application/json` to send a JSON body (recommended), or `application/sparql-query` to send a raw SPARQL query string as the request body.
+</ParamField>
+
+### Request Body (JSON)
+
+<ParamField body="query" type="string" required>
+  A valid SPARQL 1.1 query or update string.
+</ParamField>
+
+<ParamField body="graph_id" type="string">
+  The ID of a specific knowledge graph to query. Omit this field to query across all graphs in your workspace using the default dataset.
+</ParamField>
+
+<ParamField body="format" type="string">
+  Desired response format for SELECT and ASK results:
+  - `sparql-results+json` (default)
+  - `sparql-results+xml`
+  - `text/csv`
+
+  CONSTRUCT queries always return Turtle unless you set `Accept: application/ld+json` in the request header.
+</ParamField>
+
+<ParamField body="timeout" type="integer">
+  Maximum query execution time in seconds. Queries that exceed this limit are aborted with a `408 Request Timeout` response. Defaults to `30`, maximum `300`.
+</ParamField>
+
+<ParamField body="include_inferred" type="boolean">
+  Set to `true` to include persisted inferred triples in the query dataset. Set to `false` to query only explicitly asserted triples. Defaults to `true`.
+</ParamField>
+
+### Response Fields (SPARQL JSON Format)
+
+<ResponseField name="head" type="object">
+  Describes the variables returned by the query.
+  <Expandable title="head fields">
+    <ResponseField name="vars" type="array">
+      An ordered array of variable name strings — for example, `["subject", "label"]`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="results" type="object">
+  Contains the result rows.
+  <Expandable title="results fields">
+    <ResponseField name="bindings" type="array">
+      An array of binding objects. Each binding maps variable names to RDF term objects.
+      <Expandable title="binding term fields">
+        <ResponseField name="type" type="string">
+          RDF term type: `uri`, `literal`, or `bnode`.
+        </ResponseField>
+        <ResponseField name="value" type="string">
+          The string value of the term (IRI, lexical form, or blank node ID).
+        </ResponseField>
+        <ResponseField name="datatype" type="string">
+          XSD datatype IRI for typed literals. Present only when `type` is `literal` and a datatype is set.
+        </ResponseField>
+        <ResponseField name="xml:lang" type="string">
+          BCP 47 language tag. Present only when `type` is `literal` and a language tag is set.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Example 1: Simple SELECT Query
+
+Retrieve the names and types of all entities in a specific graph.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/query \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT ?entity ?type ?label\nWHERE {\n  ?entity rdf:type ?type .\n  OPTIONAL { ?entity rdfs:label ?label . FILTER(LANG(?label) = \"en\") }\n}\nLIMIT 10",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "format": "sparql-results+json",
+    "timeout": 30,
+    "include_inferred": true
+  }'
+```
+
+```python Python
+import os, requests
+
+query = """
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?entity ?type ?label
+WHERE {
+  ?entity rdf:type ?type .
+  OPTIONAL { ?entity rdfs:label ?label . FILTER(LANG(?label) = "en") }
+}
+LIMIT 10
+"""
+
+payload = {
+    "query": query,
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "format": "sparql-results+json",
+    "timeout": 30,
+    "include_inferred": True,
+}
+
+resp = requests.post(
+    "https://api.anclab.io/v1/query",
+    json=payload,
+    headers={"Authorization": f"Bearer {os.environ['ANCHUB_API_KEY']}"},
+)
+resp.raise_for_status()
+
+for binding in resp.json()["results"]["bindings"]:
+    entity = binding["entity"]["value"]
+    label  = binding.get("label", {}).get("value", "(no label)")
+    print(f"{entity}  —  {label}")
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "head": {
+    "vars": ["entity", "type", "label"]
+  },
+  "results": {
+    "bindings": [
+      {
+        "entity": { "type": "uri", "value": "https://example.com/products/SKU-001" },
+        "type":   { "type": "uri", "value": "https://schema.org/Product" },
+        "label":  { "type": "literal", "value": "Titanium Gear Set", "xml:lang": "en" }
+      },
+      {
+        "entity": { "type": "uri", "value": "https://example.com/products/SKU-002" },
+        "type":   { "type": "uri", "value": "https://schema.org/Product" },
+        "label":  { "type": "literal", "value": "Carbon Fibre Frame", "xml:lang": "en" }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Example 2: CONSTRUCT Query
+
+Build a sub-graph of products and their suppliers.
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/query \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/turtle" \
+  -d '{
+    "query": "PREFIX schema: <https://schema.org/>\nCONSTRUCT {\n  ?product schema:name ?name .\n  ?product schema:manufacturer ?supplier .\n  ?supplier schema:name ?supplierName .\n}\nWHERE {\n  ?product a schema:Product ;\n           schema:name ?name ;\n           schema:manufacturer ?supplier .\n  ?supplier schema:name ?supplierName .\n}\nLIMIT 50",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "timeout": 60
+  }'
+```
+
+**Response (Turtle):**
+
+```
+@prefix schema: <https://schema.org/> .
+
+<https://example.com/products/SKU-001>
+    schema:name         "Titanium Gear Set" ;
+    schema:manufacturer <https://example.com/suppliers/SUP-42> .
+
+<https://example.com/suppliers/SUP-42>
+    schema:name "PrecisionParts Ltd" .
+```
+
+---
+
+## Example 3: UPDATE Query (INSERT DATA)
+
+<Warning>
+  SPARQL UPDATE operations (`INSERT DATA`, `DELETE DATA`, `DELETE/INSERT`) permanently modify the graph. These changes cannot be undone through the API. Export the graph before running updates in production, and test with a staging graph first.
+</Warning>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/query \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "PREFIX schema: <https://schema.org/>\nINSERT DATA {\n  <https://example.com/products/SKU-003>\n    a schema:Product ;\n    schema:name \"Aluminium Stem\" ;\n    schema:sku \"SKU-003\" ;\n    schema:price \"49.99\"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n}",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "update_type": "INSERT_DATA",
+    "triples_affected": 4,
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+    "executed_at": "2025-04-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+## Explain a Query Execution Plan
+
+```
+POST /query/explain
+```
+
+Returns the query engine's execution plan without actually running the query. Use this to understand join ordering, estimated cardinalities, and potential performance bottlenecks before submitting expensive queries to production graphs.
+
+### Request Body
+
+The request body is identical to `POST /query`. The `format`, `timeout`, and `include_inferred` fields are respected for plan generation.
+
+### Example Request
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/query/explain \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "PREFIX schema: <https://schema.org/>\nSELECT ?product ?name\nWHERE { ?product a schema:Product ; schema:name ?name . }\nORDER BY ?name",
+    "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "data": {
+    "plan": {
+      "operation": "Projection",
+      "variables": ["product", "name"],
+      "child": {
+        "operation": "Sort",
+        "order_by": ["name ASC"],
+        "estimated_rows": 12450,
+        "child": {
+          "operation": "Join",
+          "estimated_rows": 12450,
+          "children": [
+            {
+              "operation": "StatementPattern",
+              "pattern": "?product rdf:type schema:Product",
+              "estimated_rows": 12450,
+              "index_used": "spoc"
+            },
+            {
+              "operation": "StatementPattern",
+              "pattern": "?product schema:name ?name",
+              "estimated_rows": 12450,
+              "index_used": "spoc"
+            }
+          ]
+        }
+      }
+    },
+    "estimated_cost": 24900,
+    "estimated_duration_ms": 85
+  }
+}
+```
+
+<Tip>
+  Set `include_inferred: false` when querying large graphs that contain many persisted inferred triples. Excluding inferred triples from the dataset can reduce query execution time by 30–70% for SELECT queries that only need asserted facts.
+</Tip>
+
+---
+
+## List Query History
+
+```
+GET /query/history
+```
+
+Returns a paginated list of recently executed queries for your workspace, including execution metadata. Useful for auditing, debugging, and identifying slow queries.
+
+### Query Parameters
+
+<ParamField query="page" type="integer">
+  Page number. Defaults to `1`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Results per page. Defaults to `20`, maximum `100`.
+</ParamField>
+
+<ParamField query="graph_id" type="string">
+  Filter history to queries executed against a specific graph.
+</ParamField>
+
+### Example Request
+
+```bash curl
+curl "https://api.anclab.io/v1/query/history?limit=5" \
+  -H "Authorization: Bearer anchub_sk_live_abc123XYZ"
+```
+
+### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "qhist_07PF9NVKT2ZWXM3QLBYU8ASEH",
+      "query_preview": "SELECT ?entity ?type ?label WHERE { ?entity rdf:type ?type ...",
+      "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+      "format": "sparql-results+json",
+      "rows_returned": 10,
+      "duration_ms": 43,
+      "executed_at": "2025-04-15T10:25:00Z",
+      "status": "success"
+    },
+    {
+      "id": "qhist_08QG1OWLU3AXYN4RMCZV9BTFI",
+      "query_preview": "INSERT DATA { <https://example.com/products/SKU-003> a schema:Product ...",
+      "graph_id": "grph_03LD5MSRB9YWZP4OFVHJ1TGCK",
+      "format": null,
+      "rows_returned": null,
+      "duration_ms": 12,
+      "executed_at": "2025-04-15T10:30:00Z",
+      "status": "success"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 5,
+    "total": 128,
+    "total_pages": 26
+  }
+}
+```

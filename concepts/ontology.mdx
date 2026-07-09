@@ -1,0 +1,232 @@
+---
+title: "What Is an Ontology? Core Concepts and Structure"
+sidebarTitle: "Ontology"
+description: "Learn what an ontology is, how it structures domain knowledge using classes, properties, individuals, and axioms, and when to apply OWL or SKOS."
+---
+
+An ontology is a formal, machine-readable representation of knowledge within a specific domain. It defines the concepts that exist in that domain, the properties those concepts carry, and the relationships between them — giving both humans and software systems a shared, unambiguous vocabulary. By encoding this structure explicitly, you enable applications to reason over data, detect inconsistencies, and draw conclusions that go beyond what is directly stated.
+
+## Core Components
+
+Every ontology is built from four foundational building blocks. Understanding each one helps you design ontologies that are both expressive and maintainable.
+
+<AccordionGroup>
+  <Accordion title="Classes — Types of Entities">
+    A **class** represents a category or type of thing in your domain. Think of classes as the nouns of your ontology. For example, in a biomedical ontology you might define `Disease`, `Drug`, and `Protein` as classes.
+
+    Classes can be arranged in hierarchies. A `RareDisease` class can be declared a subclass of `Disease`, inheriting its properties while adding more specific constraints.
+
+    ```turtle
+    # Turtle (RDF/OWL) — class hierarchy
+    :Disease       a owl:Class .
+    :RareDisease   a owl:Class ;
+                   rdfs:subClassOf :Disease .
+    ```
+  </Accordion>
+
+  <Accordion title="Properties — Attributes and Relationships">
+    **Properties** describe what you can say about instances of a class. OWL distinguishes two kinds:
+
+    - **Datatype properties** link an individual to a literal value (a string, number, or date).
+    - **Object properties** link an individual to another individual, expressing relationships between entities.
+
+    ```turtle
+    # Datatype property
+    :hasApprovalYear   a owl:DatatypeProperty ;
+                       rdfs:domain :Drug ;
+                       rdfs:range  xsd:gYear .
+
+    # Object property
+    :treats            a owl:ObjectProperty ;
+                       rdfs:domain :Drug ;
+                       rdfs:range  :Disease .
+    ```
+  </Accordion>
+
+  <Accordion title="Individuals — Instances of Classes">
+    An **individual** (also called an instance) is a specific, named member of a class. Individuals are where your ontology connects to real-world data.
+
+    ```turtle
+    :Aspirin    a :Drug ;
+                :hasApprovalYear "1899"^^xsd:gYear ;
+                :treats          :Headache .
+
+    :Headache   a :Disease .
+    ```
+  </Accordion>
+
+  <Accordion title="Axioms — Logical Constraints">
+    **Axioms** are logical statements that constrain how classes and properties can be used. They allow a reasoner to validate your data and infer new facts automatically. Common axiom types include:
+
+    - **Domain and range restrictions** — constrain which classes a property applies to.
+    - **Cardinality restrictions** — require exactly one, at least one, or at most N values.
+    - **Disjointness** — declare that two classes cannot share members.
+    - **Equivalence** — state that two classes or individuals are the same.
+
+    ```turtle
+    # Cardinality: a Drug must treat at least one Disease
+    :Drug   rdfs:subClassOf [
+              a owl:Restriction ;
+              owl:onProperty    :treats ;
+              owl:minCardinality 1
+            ] .
+
+    # Disjointness: Drug and Disease share no members
+    :Drug   owl:disjointWith :Disease .
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## A Minimal Ontology Example
+
+The snippet below brings all four components together in a single, self-contained Turtle file. You can load this directly into any OWL-compatible triplestore or ontology editor such as Protégé.
+
+```turtle
+@prefix :      <https://example.org/pharma#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# ── Ontology declaration ─────────────────────────────────────────────────────
+<https://example.org/pharma> a owl:Ontology ;
+    rdfs:label "Minimal Pharmaceutical Ontology"@en .
+
+# ── Classes ───────────────────────────────────────────────────────────────────
+:Substance   a owl:Class .
+:Drug        a owl:Class ; rdfs:subClassOf :Substance .
+:Disease     a owl:Class .
+
+:Drug owl:disjointWith :Disease .
+
+# ── Properties ───────────────────────────────────────────────────────────────
+:treats      a owl:ObjectProperty ;
+             rdfs:domain :Drug ;
+             rdfs:range  :Disease .
+
+:activeIngredient  a owl:DatatypeProperty ;
+                   rdfs:domain :Drug ;
+                   rdfs:range  xsd:string .
+
+# ── Individuals ──────────────────────────────────────────────────────────────
+:Ibuprofen   a :Drug ;
+             :activeIngredient "ibuprofen" ;
+             :treats :Inflammation .
+
+:Inflammation a :Disease ;
+              rdfs:label "Inflammation"@en .
+```
+
+---
+
+## OWL and SKOS
+
+Two W3C standards dominate ontology engineering. Choosing between them depends on how much formal reasoning power you need.
+
+### OWL — Web Ontology Language
+
+OWL is a full description-logic language. It supports class expressions, property characteristics (transitivity, symmetry, inverse), and cardinality restrictions. A reasoner such as HermiT or Pellet can automatically classify your hierarchy and detect logical contradictions.
+
+Use OWL when:
+- You need automated classification or consistency checking.
+- Your domain has complex logical relationships (e.g., "a parent is someone who has at least one child").
+- You are integrating heterogeneous datasets and need equivalence mappings.
+
+### SKOS — Simple Knowledge Organization System
+
+SKOS models concept schemes: thesauri, taxonomies, and controlled vocabularies. It is deliberately lightweight — there is no formal reasoning, but it is easy to publish and link.
+
+```turtle
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix :     <https://example.org/taxonomy#> .
+
+:Analytics   a skos:Concept ;
+             skos:prefLabel    "Analytics"@en ;
+             skos:narrower     :GraphAnalytics ;
+             skos:narrower     :PredictiveAnalytics .
+
+:GraphAnalytics a skos:Concept ;
+             skos:prefLabel    "Graph Analytics"@en ;
+             skos:broader      :Analytics .
+```
+
+<Tip>
+  Use **OWL** when you need a reasoner to enforce constraints and infer new class memberships. Use **SKOS** when you are publishing a controlled vocabulary or thesaurus and interoperability across catalogues matters more than logical expressivity. You can always combine both: define your formal class hierarchy in OWL and attach SKOS labels and mappings to the same URIs.
+</Tip>
+
+---
+
+## Ontology Types
+
+<AccordionGroup>
+  <Accordion title="Upper Ontologies">
+    An **upper ontology** (also called a foundational or top-level ontology) defines the most general concepts that apply across all domains — things like `Object`, `Event`, `Process`, `Quality`, and `Time`. Examples include BFO (Basic Formal Ontology), DOLCE, and SUMO.
+
+    By grounding your domain ontology in an upper ontology, you gain a principled framework for cross-domain integration and interoperability.
+  </Accordion>
+
+  <Accordion title="Domain Ontologies">
+    A **domain ontology** models concepts within a specific field of knowledge: medicine, law, finance, manufacturing, or ecology. It is typically aligned to an upper ontology and may import or extend other domain ontologies.
+
+    Well-known examples include SNOMED CT (clinical medicine), Gene Ontology (molecular biology), and FIBO (financial industry).
+  </Accordion>
+
+  <Accordion title="Application Ontologies">
+    An **application ontology** is purpose-built for a specific software system or use case. It may reuse classes from domain ontologies while adding constraints or extensions that only make sense within that application's context.
+
+    Application ontologies trade generality for precision: they are optimised for a particular task and are often not intended for reuse outside that context.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## SHACL — Shape Constraints for Data Validation
+
+SHACL (Shapes Constraint Language) lets you define data quality rules that operate on your RDF graph independently of OWL reasoning. Where OWL axioms drive inference, SHACL shapes drive **validation** — you specify what well-formed data must look like and then check whether your graph satisfies those shapes.
+
+```turtle
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix :     <https://example.org/pharma#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+:DrugShape  a sh:NodeShape ;
+            sh:targetClass :Drug ;
+            sh:property [
+              sh:path        :activeIngredient ;
+              sh:datatype    xsd:string ;
+              sh:minCount    1 ;
+              sh:maxCount    1 ;
+              sh:message     "Every Drug must have exactly one activeIngredient."
+            ] ;
+            sh:property [
+              sh:path     :treats ;
+              sh:class    :Disease ;
+              sh:minCount 1 ;
+              sh:message  "Every Drug must treat at least one Disease."
+            ] .
+```
+
+<Note>
+  SHACL and OWL serve complementary roles. Run OWL reasoning first to materialise inferred triples, then apply SHACL shapes to validate that the enriched graph meets your data-quality requirements.
+</Note>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Knowledge Graphs" icon="diagram-project" href="/concepts/knowledge-graphs">
+    See how ontologies serve as the schema layer for a knowledge graph populated with real data.
+  </Card>
+  <Card title="Semantics & Inference" icon="brain" href="/concepts/semantics">
+    Learn how OWL reasoning profiles let you derive new facts automatically from your ontology.
+  </Card>
+  <Card title="Graph Analytics" icon="chart-network" href="/concepts/data-analytics">
+    Discover how ontology-enriched data powers deeper analytics than SQL alone.
+  </Card>
+  <Card title="Build an Ontology" icon="shield-check" href="/guides/building-an-ontology">
+    Write and run SHACL shapes to enforce data quality across your knowledge graph.
+  </Card>
+</CardGroup>

@@ -1,0 +1,143 @@
+---
+title: "Frequently Asked Questions About the Knowledge Hub"
+sidebarTitle: "FAQ"
+description: "Answers to the most common questions about getting started, managing ontologies, querying knowledge graphs, and keeping your data secure."
+---
+
+Whether you're evaluating the platform for the first time or running production workloads, you'll find quick answers here to the questions the ANC Lab team hears most often. Questions are grouped by theme so you can jump to the section most relevant to what you're doing. If your question isn't covered, open a ticket from the **Support** menu inside the Knowledge Hub dashboard.
+
+---
+
+## Getting Started
+
+<AccordionGroup>
+
+  <Accordion title="What is the ANC Lab Knowledge Hub?">
+    The ANC Lab Knowledge Hub is a cloud-based platform for building, managing, querying, and publishing ontologies and knowledge graphs. It provides a SPARQL 1.1 endpoint, an OWL reasoner, SHACL validation, a visual graph explorer, and REST and GraphQL APIs — all in a single, managed environment. You don't need to install or operate any triple-store infrastructure yourself; ANC Lab handles provisioning, scaling, backups, and upgrades on your behalf.
+  </Accordion>
+
+  <Accordion title="How do I create an account?">
+    Navigate to [app.anclab.io/signup](https://app.anclab.io/signup) and register with your work email address or an OAuth provider (Google, GitHub, or Microsoft). After you verify your email, the platform walks you through creating your first workspace and dataset. If your organisation uses SSO, ask your IT administrator to configure the SAML 2.0 integration before you sign up individually.
+  </Accordion>
+
+  <Accordion title="What programming languages are supported?">
+    The Knowledge Hub exposes language-agnostic HTTP APIs (SPARQL endpoint, REST, GraphQL), so you can use any language with an HTTP client. ANC Lab publishes official SDKs for **Python**, **JavaScript/TypeScript**, and **Java**. Community-maintained clients exist for Go, Ruby, and .NET. The API reference documents every endpoint, so integrating from any stack is straightforward.
+  </Accordion>
+
+  <Accordion title="Is there a free tier?">
+    Yes. The **Starter** plan is free forever and includes up to 5 million triples, 3 named datasets, 1 GB of storage, and full access to SPARQL, SHACL validation, and the visual explorer. When you outgrow Starter, upgrade to **Pro** or **Enterprise** from the Billing page. No credit card is required to sign up for Starter.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Ontologies
+
+<AccordionGroup>
+
+  <Accordion title="Can I import existing OWL ontologies?">
+    Yes. You can import any OWL ontology in Turtle, RDF/XML, JSON-LD, N-Triples, or N-Quads format through the dashboard UI, the REST API (`POST /datasets/{id}/import`), or the Python/JS SDKs. The importer validates the file against the selected OWL profile before committing it, and surfaces any syntax or consistency errors in a detailed report. `owl:imports` declarations are followed and resolved automatically if the imported IRI is HTTP-dereferenceable.
+  </Accordion>
+
+  <Accordion title="What is the maximum ontology size?">
+    On the **Starter** plan, a single dataset is capped at 5 million triples. **Pro** datasets support up to 500 million triples, and **Enterprise** datasets are uncapped (subject to your contract). If your ontology alone approaches the Starter limit, consider moving to Pro or splitting a monolithic ontology into modular sub-ontologies connected by `owl:imports`.
+
+    <Tip>
+      Large ontologies (over 100k axioms) load and reason faster when you choose the **OWL EL** or **OWL RL** profile rather than OWL DL or Full.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Can I version my ontologies?">
+    Yes. Every dataset in the Knowledge Hub maintains an immutable change log. You can tag any state as a named version (e.g., `v1.2.0`) from the **Versions** tab, then restore, compare, or branch from any tag. The platform also records who made each change and when, giving you a full audit trail. For team workflows, the Git-style branching model lets multiple contributors work on separate branches before merging.
+  </Accordion>
+
+  <Accordion title="How do I handle ontology merging?">
+    Use the **Merge** tool in the dashboard (or the `POST /datasets/{id}/merge` API) to combine two datasets into one. The tool detects IRI conflicts, `owl:sameAs` candidates, and property domain/range clashes, and surfaces them as a resolution checklist before committing the merge. For complex merges, write a SPARQL `INSERT/DELETE` migration script first to normalise naming conventions, then run the merge. The Versions tab lets you roll back if the result isn't right.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Knowledge Graphs
+
+<AccordionGroup>
+
+  <Accordion title="How many triples can a graph hold?">
+    A single named graph within a dataset has no hard triple count limit beyond the dataset-level cap for your plan (5M on Starter, 500M on Pro, unlimited on Enterprise). Practical query performance depends on index configuration and query complexity, not on raw triple count. ANC Lab's infrastructure autoscales storage and query workers as your data grows.
+  </Accordion>
+
+  <Accordion title="Can I export my graph data?">
+    Yes. Export a full dataset or a specific named graph at any time from the **Export** panel or via `GET /datasets/{id}/export`. Available formats are Turtle, N-Triples, N-Quads, TriG, JSON-LD, and RDF/XML. You can also use a `CONSTRUCT` or `DESCRIBE` SPARQL query to export a filtered subgraph in any supported format. Exports are streamed, so even very large datasets don't time out.
+  </Accordion>
+
+  <Accordion title="How do I handle duplicate triples?">
+    RDF sets do not contain duplicate triples by definition — asserting the same triple twice has no effect. Duplicates become an issue when two IRIs refer to the same real-world entity but look different syntactically. Use the **Duplicate Detection** feature under **Data Quality** to find candidate pairs ranked by semantic similarity, then resolve them with `owl:sameAs` assertions or IRI normalisation scripts.
+  </Accordion>
+
+  <Accordion title="What graph visualization tools work with the API?">
+    Any tool that supports SPARQL or JSON-LD works out of the box. The Knowledge Hub has verified integrations with **Gephi** (via the SPARQL plugin), **Neo4j Bloom** (via the RDF-to-LPG bridge), **Grafana** (via the SPARQL data source plugin), and **Sigma.js** / **Cytoscape.js** in custom web apps. ANC Lab's own built-in visual explorer handles up to ~50k visible nodes and supports click-to-expand traversal, filtering, and export to PNG/SVG.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Querying & Reasoning
+
+<AccordionGroup>
+
+  <Accordion title="Is SPARQL 1.1 fully supported?">
+    Yes. The Knowledge Hub's SPARQL endpoint is fully compliant with SPARQL 1.1 Query, Update, Graph Store HTTP Protocol, Federated Query (`SERVICE`), and Entailment Regimes. All four query forms (`SELECT`, `CONSTRUCT`, `ASK`, `DESCRIBE`) are supported, along with aggregates, subqueries, property paths, `VALUES`, `BIND`, `FILTER`, and `EXISTS`/`NOT EXISTS`. You can test queries interactively in the built-in SPARQL editor before using them in your application.
+  </Accordion>
+
+  <Accordion title="How do I enable reasoning on a graph?">
+    Open the dataset **Settings** page and choose a reasoning profile from the **Inference** dropdown: Simple, RDFS, OWL EL, OWL QL, OWL RL, or OWL DL. Save the setting to trigger an initial materialisation pass. After that, the reasoner runs incrementally as you add or remove data. You can also trigger a full re-materialisation manually from the **Reasoning** tab if needed.
+
+    <Info>
+      Enabling OWL DL reasoning on datasets with more than 10 million triples may increase query latency by 20–50%. Start with OWL RL for a good balance of expressivity and speed.
+    </Info>
+  </Accordion>
+
+  <Accordion title="What are the query timeouts?">
+    Default query timeouts are **30 seconds** for `SELECT`/`ASK`, **60 seconds** for `CONSTRUCT`/`DESCRIBE`, and **120 seconds** for `UPDATE` operations. On Pro and Enterprise plans you can raise these limits per-dataset up to 300 seconds via **Settings → Query Limits**. For very long-running analytics jobs, use the **Async Query** API (`POST /datasets/{id}/queries/async`), which runs your query as a background job and notifies you via webhook when results are ready.
+  </Accordion>
+
+  <Accordion title="Can I write custom inference rules?">
+    Yes, in two ways. First, you can write **SWRL rules** directly in the ontology editor — the built-in rule engine fires them forward-chain during each reasoning cycle. Second, you can write **SHACL-AF rules** (SPARQL-based `sh:rule` triples) to derive new facts during validation passes. For maximum flexibility, you can also schedule **SPARQL `INSERT WHERE`** queries as recurring jobs via the **Automations** feature, effectively implementing any custom inference logic you need.
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Data & Security
+
+<AccordionGroup>
+
+  <Accordion title="Is my data encrypted?">
+    Yes. All data is encrypted **at rest** using AES-256 and **in transit** using TLS 1.2 or higher. Encryption keys are managed by ANC Lab using an HSM-backed key management service. Enterprise customers can bring their own encryption keys (BYOK) via the KMS integration. ANC Lab does not access or inspect your graph data for any purpose other than operating and troubleshooting the service, as described in the [Privacy Policy](https://anclab.io/privacy).
+  </Accordion>
+
+  <Accordion title="Can I delete all my data?">
+    Yes. To delete a specific named graph, use `DROP GRAPH <graphIRI>` in SPARQL Update or the dashboard **Delete Graph** button. To delete an entire dataset, go to **Settings → Danger Zone → Delete Dataset** — this permanently removes all triples, named graphs, versions, and associated metadata. To delete your account and all associated data, submit a data erasure request from **Account → Privacy**. Deletion is irreversible; ANC Lab purges data from backups within 30 days in accordance with GDPR Article 17.
+
+    <Note>
+      Enterprise customers with custom backup agreements should coordinate with their ANC Lab account manager before submitting large-scale deletion requests.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Are there rate limits?">
+    Rate limits apply per API key and vary by plan:
+
+    | Plan       | SPARQL Queries | REST API Calls | Concurrent Queries |
+    |------------|---------------|----------------|--------------------|
+    | Starter    | 100 / min     | 200 / min      | 5                  |
+    | Pro        | 1,000 / min   | 2,000 / min    | 25                 |
+    | Enterprise | Custom        | Custom         | Custom             |
+
+    When you exceed a limit, the API returns `HTTP 429 Too Many Requests` with a `Retry-After` header. Use exponential back-off in your client to handle bursts gracefully. Contact [support@anclab.io](mailto:support@anclab.io) if you need a temporary rate-limit increase for a scheduled migration or bulk load.
+  </Accordion>
+
+</AccordionGroup>

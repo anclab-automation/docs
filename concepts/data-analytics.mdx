@@ -1,0 +1,309 @@
+---
+title: "Graph Analytics: Insights from Connected Data"
+sidebarTitle: "Data Analytics"
+description: "Discover how graph analytics unlocks insights unavailable in traditional BI — from centrality and path finding to ontology-enriched SPARQL aggregations."
+---
+
+Traditional business intelligence works by aggregating values in rows and columns: sum revenue, average delivery time, count transactions per region. Graph analytics works differently — it treats the *connections* between entities as first-class data. The shortest path between a supplier and a final product, the number of relationships passing through a single person, or the subgraph of all entities semantically related to a given concept: these are questions that SQL joins approximate only awkwardly, but that a knowledge graph answers naturally. When your graph is also grounded in an ontology, the analytics layer gains an additional superpower — it can reason about *class hierarchies*, automatically including all subtypes of a concept in every query.
+
+## Graph Analytics vs. Traditional BI
+
+| Dimension | Traditional BI / SQL | Graph Analytics |
+|---|---|---|
+| Data model | Tables, rows, columns | Nodes, edges, triples |
+| Joins | Explicit, schema-bound | Implicit, traversal-based |
+| Query language | SQL, MDX | SPARQL, Cypher, Gremlin |
+| Hierarchy support | Manual CTE or closure tables | Native subclass traversal via `rdfs:subClassOf*` |
+| Relationship depth | Expensive beyond 2–3 joins | Efficient multi-hop traversal |
+| Schema flexibility | Fixed DDL | Open-world, schema-optional |
+| Inference enrichment | None | OWL/RDFS materialised triples |
+
+---
+
+## Core Analytics Capabilities
+
+<AccordionGroup>
+  <Accordion title="Graph Traversal Metrics">
+    Traversal metrics answer questions like "how many hops separate entity A from entity B?" or "what is the complete reachable neighbourhood of this node?" They are foundational to supply-chain traceability, lineage analysis, and impact assessment.
+
+    ```sparql
+    PREFIX :  <https://data.anclab.io/kg#>
+
+    # Find all entities reachable from :ANCLab
+    # via any combination of :memberOf, :partneredWith, :suppliedBy
+    SELECT DISTINCT ?entity ?type
+    WHERE {
+      :ANCLab (  :hasMember
+               | :partneredWith
+               | :suppliedBy
+               )+ ?entity .
+      ?entity a ?type .
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Centrality Analysis">
+    **Degree centrality** counts how many direct relationships a node has. **Betweenness centrality** measures how often a node sits on the shortest path between other nodes — high betweenness nodes are critical connectors whose removal fragments the graph.
+
+    ```sparql
+    PREFIX :  <https://data.anclab.io/kg#>
+    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+    # Degree centrality: count outgoing relationships per Person
+    SELECT ?person ?name (COUNT(?rel) AS ?degree)
+    WHERE {
+      ?person  a foaf:Person ;
+               foaf:name  ?name ;
+               ?rel        ?target .
+    }
+    GROUP BY ?person ?name
+    ORDER BY DESC(?degree)
+    LIMIT 20
+    ```
+  </Accordion>
+
+  <Accordion title="Path Finding">
+    Path finding locates routes — shortest, cheapest, or most reliable — through the graph. It powers supplier-to-customer traceability, fraud-ring detection, and recommendation chains.
+
+    ```sparql
+    PREFIX :    <https://data.anclab.io/kg#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+    # Find all paths of length ≤ 3 between two organisations
+    SELECT ?intermediate1 ?intermediate2
+    WHERE {
+      :SupplierA  :suppliedBy? / :partnerOf? / :ownedBy?  ?intermediate1 .
+      ?intermediate1  :partnerOf? / :ownedBy?             ?intermediate2 .
+      ?intermediate2  (:partnerOf | :ownedBy)+            :SupplierB .
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Subgraph Detection">
+    Subgraph detection isolates clusters of densely connected entities — communities, cliques, or motifs. In financial crime analysis you detect rings of entities that collectively route value through a series of transactions. In genomics you find protein interaction clusters associated with a pathway.
+  </Accordion>
+
+  <Accordion title="Aggregation over Semantic Classes">
+    Because your data carries ontology types, you can aggregate over **all subclasses** of a concept without enumerating them explicitly. If you add a new subtype of `:FinancialInstrument` tomorrow, every existing aggregation query over that class automatically includes it.
+
+    ```sparql
+    PREFIX :    <https://ontology.anclab.io/finance#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+    # Count all FinancialInstrument instances, including all subtypes
+    SELECT ?type (COUNT(?instrument) AS ?count)
+    WHERE {
+      ?type     rdfs:subClassOf* :FinancialInstrument .
+      ?instrument a ?type .
+    }
+    GROUP BY ?type
+    ORDER BY DESC(?count)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## How the Ontology Enriches Analytics
+
+The ontology is not just metadata — it directly expands the scope and accuracy of every analytical query. Three mechanisms are especially powerful:
+
+### 1. Transitive Subclass Queries
+
+The SPARQL `rdfs:subClassOf*` property path operator traverses the entire class hierarchy. You do not need to know how deep or wide the hierarchy is; the query engine walks it automatically.
+
+```sparql
+# Without ontology enrichment: only exact class matches
+SELECT (COUNT(?d) AS ?count)
+WHERE { ?d  a  :Antibacterial . }
+
+# With ontology enrichment: includes Penicillin, Cephalosporin, etc.
+SELECT (COUNT(?d) AS ?count)
+WHERE {
+  ?type rdfs:subClassOf* :Antibacterial .
+  ?d    a ?type .
+}
+```
+
+### 2. Inferred Relationships
+
+After running OWL 2 RL materialisation, your graph contains inferred triples. An analytics query that asks "which organisations are located in the EU?" automatically benefits from inferred `locatedIn` triples derived from property chains — without any ETL transformation.
+
+### 3. SHACL-Validated Quality
+
+SHACL shape validation, run before analytics, ensures that the data feeding your dashboards is complete and consistent. Incomplete entities — missing a required property — can be flagged and excluded or corrected before they distort aggregations.
+
+---
+
+## SPARQL Analytics Queries
+
+### Count Entities by Type
+
+```sparql
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX :     <https://data.anclab.io/kg#>
+
+SELECT ?typeName (COUNT(?entity) AS ?entityCount)
+WHERE {
+  ?entity  a       ?type .
+  ?type    rdfs:label  ?typeName .
+  FILTER (STRSTARTS(STR(?type), "https://data.anclab.io/kg#"))
+}
+GROUP BY ?typeName
+ORDER BY DESC(?entityCount)
+```
+
+| typeName | entityCount |
+|---|---|
+| Person | 4 821 |
+| Organisation | 1 203 |
+| Project | 576 |
+| Publication | 12 048 |
+
+### Find Top-Connected Nodes
+
+```sparql
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX :     <https://data.anclab.io/kg#>
+
+# Top 10 most-connected entities (highest combined in + out degree)
+SELECT ?entity ?label (COUNT(?related) AS ?connections)
+WHERE {
+  { ?entity  ?p  ?related . }
+  UNION
+  { ?related ?p  ?entity  . }
+
+  ?entity rdfs:label ?label .
+  FILTER (!isLiteral(?related))
+}
+GROUP  BY ?entity ?label
+ORDER  BY DESC(?connections)
+LIMIT  10
+```
+
+### Average Relationship Depth Across a Supply Chain
+
+```sparql
+PREFIX :  <https://data.anclab.io/supply#>
+
+SELECT ?product (AVG(?depth) AS ?avgSupplyChainDepth)
+WHERE {
+  {
+    SELECT ?product ?supplier (COUNT(?hop) AS ?depth)
+    WHERE {
+      ?product  :requires+  ?hop .
+      ?hop      :suppliedBy  ?supplier .
+    }
+    GROUP BY ?product ?supplier
+  }
+}
+GROUP BY ?product
+ORDER BY DESC(?avgSupplyChainDepth)
+```
+
+---
+
+## Combining Graph Analytics with Other Data Sources
+
+<Info>
+  Knowledge graph analytics become even more powerful when you join graph data with **time-series** or **tabular** data. For example: combine a supply-chain knowledge graph with IoT sensor time-series to detect which semantically-related suppliers experienced delivery delays during a specific weather event, or join a financial knowledge graph with transaction tables to compute risk scores that incorporate both network centrality and account behaviour over time. Federated SPARQL queries and RDF mapping layers (R2RML, RML) make this possible without migrating all data into a single store.
+</Info>
+
+---
+
+## Common Analytics Use Cases
+
+<CardGroup cols={3}>
+  <Card title="Customer 360°" icon="user-circle">
+    Aggregate purchases, interactions, preferences, and segment memberships across all touchpoints. Ontology hierarchies ensure product category roll-ups are always consistent.
+  </Card>
+  <Card title="Risk & Compliance" icon="shield-halved">
+    Score entities by network centrality in transaction graphs. Flag clusters that match known fraud patterns using subgraph detection.
+  </Card>
+  <Card title="Supply Chain Resilience" icon="truck">
+    Identify single-source dependencies through reachability analysis. Simulate the impact of removing a supplier node before disruptions occur.
+  </Card>
+  <Card title="Research Discovery" icon="microscope">
+    Find co-authorship clusters, citation paths, and topic communities in biomedical or academic graphs. Semantic class queries surface related research automatically.
+  </Card>
+  <Card title="IT & Security Operations" icon="server">
+    Map infrastructure assets, dependencies, and vulnerabilities as a graph. Shortest-path queries reveal blast radius when a component is compromised.
+  </Card>
+  <Card title="Content Recommendation" icon="rectangle-list">
+    Build topic graphs over content corpora. Walk the graph from a user's history to semantically adjacent articles, products, or courses.
+  </Card>
+</CardGroup>
+
+---
+
+## Visualising Graph Analytics Results
+
+Raw SPARQL result sets can be piped into visualisation tools that understand RDF:
+
+<Steps>
+  <Step title="Export from SPARQL Endpoint">
+    Use the `FORMAT=json` or `FORMAT=csv` parameter on your SPARQL endpoint to download aggregated results directly into your BI tool or Python environment.
+
+    ```python
+    import requests, pandas as pd
+
+    query = """
+    PREFIX : <https://data.anclab.io/kg#>
+    SELECT ?type (COUNT(?e) AS ?count)
+    WHERE { ?e a ?type . }
+    GROUP BY ?type ORDER BY DESC(?count)
+    """
+
+    resp = requests.get(
+        "https://sparql.anclab.io/query",
+        params={"query": query, "format": "json"},
+        headers={"Accept": "application/sparql-results+json"}
+    )
+    bindings = resp.json()["results"]["bindings"]
+    df = pd.DataFrame([
+        {"type": b["type"]["value"], "count": int(b["count"]["value"])}
+        for b in bindings
+    ])
+    print(df.head(10))
+    ```
+  </Step>
+  <Step title="Load into a Graph Visualisation Tool">
+    Tools such as Gephi, yEd, and Grafana (with the SPARQL plugin) can consume the query results directly. For interactive web dashboards, libraries like D3.js and Vis.js render force-directed graphs from JSON-LD or adjacency lists.
+  </Step>
+  <Step title="Apply Graph Algorithms">
+    Use NetworkX (Python) or GraphX (Apache Spark) for computationally intensive algorithms — PageRank, Louvain community detection, Betweenness Centrality — on the exported graph. Results can be written back to the triplestore as new triples.
+
+    ```python
+    import networkx as nx
+
+    G = nx.DiGraph()
+    # Add edges from SPARQL results
+    for row in bindings:
+        G.add_edge(row["subject"]["value"], row["object"]["value"])
+
+    # Compute PageRank
+    pr = nx.pagerank(G, alpha=0.85)
+    top_nodes = sorted(pr, key=pr.get, reverse=True)[:10]
+    print("Most influential nodes:", top_nodes)
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Ontology" icon="sitemap" href="/concepts/ontology">
+    Understand the class hierarchies that power ontology-enriched aggregation queries.
+  </Card>
+  <Card title="Semantics & Inference" icon="brain" href="/concepts/semantics">
+    Learn how inferred triples silently expand the scope of every analytics query.
+  </Card>
+  <Card title="SPARQL Query Guide" icon="terminal" href="/guides/semantic-querying">
+    Master SPARQL aggregations, property paths, and federated queries.
+  </Card>
+  <Card title="Data Integration Guide" icon="plug" href="/guides/integrating-external-data">
+    Map relational and time-series data into your knowledge graph using RML and R2RML.
+  </Card>
+</CardGroup>

@@ -1,0 +1,323 @@
+---
+title: "Construct and Populate a Knowledge Graph"
+sidebarTitle: "Build Knowledge Graph"
+description: "Create a knowledge graph, link it to an ontology, and populate it with entities, triples, and bulk RDF imports using the ANC Lab Knowledge Hub API."
+---
+
+A knowledge graph turns your ontology's abstract schema into a living dataset of real-world entities and their relationships. This guide shows you how to create a graph linked to the e-commerce ontology from the [Build an Ontology](/guides/building-an-ontology) guide, add individual entities, assert relationships between them, and bulk-load larger datasets via RDF file upload.
+
+<Warning>
+Choose your IRI namespace carefully before loading any data. Once IRIs are minted and shared, changing them causes broken links and requires a full re-import. Pick a stable base namespace (e.g., `https://data.anclab.io/ecommerce/`) and stick to it. If two different datasets use the same IRI to mean different things, you will get silent namespace collisions that are difficult to debug after the fact.
+</Warning>
+
+<Steps>
+
+### Create a Graph Linked to an Ontology
+
+A graph in ANC Lab Knowledge Hub is a named RDF dataset. Link it to your ontology so the platform can enforce SHACL constraints and use the reasoner during queries.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "ecommerce-product-graph",
+    "label": "E-Commerce Product Graph",
+    "ontologyId": "ont_7x9kABcDef",
+    "baseIri": "https://data.anclab.io/ecommerce/",
+    "reasoning": true
+  }'
+```
+
+```python Python
+import requests
+
+BASE_URL = "https://api.anclab.io/v1"
+HEADERS = {
+    "Authorization": "Bearer anchub_sk_...",
+    "Content-Type": "application/json",
+}
+
+payload = {
+    "name": "ecommerce-product-graph",
+    "label": "E-Commerce Product Graph",
+    "ontologyId": "ont_7x9kABcDef",
+    "baseIri": "https://data.anclab.io/ecommerce/",
+    "reasoning": True,
+}
+
+response = requests.post(f"{BASE_URL}/graphs", json=payload, headers=HEADERS)
+graph = response.json()
+graph_id = graph["id"]
+print(f"Created graph: {graph_id}")
+```
+
+</CodeGroup>
+
+The response includes a `graphIri` (e.g., `https://data.anclab.io/ecommerce/`) and a platform `id` (e.g., `grph_3mNpQrStuv`) that you use in subsequent API calls.
+
+<Tip>
+Use **named graphs** to track provenance. When you import data from multiple sources, load each source into its own named graph (e.g., `https://data.anclab.io/ecommerce/imports/supplier-feed-2024`). You can then query or delete a single source without affecting the rest of the dataset.
+</Tip>
+
+### Add Entities (Individuals)
+
+Entities are the individuals — specific instances of your ontology classes. Add a supplier, a category, and a product.
+
+<CodeGroup>
+
+```bash curl
+# Add a Supplier individual
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/entities \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://data.anclab.io/ecommerce/supplier/acme-corp",
+    "types": ["https://ontologies.anclab.io/ecommerce/v1#Supplier"],
+    "properties": {
+      "https://ontologies.anclab.io/ecommerce/v1#hasName": "ACME Corporation",
+      "https://ontologies.anclab.io/ecommerce/v1#hasEmail": "orders@acmecorp.example"
+    }
+  }'
+
+# Add a Category individual
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/entities \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "iri": "https://data.anclab.io/ecommerce/category/electronics",
+    "types": ["https://ontologies.anclab.io/ecommerce/v1#Category"],
+    "properties": {
+      "https://ontologies.anclab.io/ecommerce/v1#hasName": "Electronics"
+    }
+  }'
+```
+
+```python Python
+entities = [
+    {
+        "iri": "https://data.anclab.io/ecommerce/supplier/acme-corp",
+        "types": ["https://ontologies.anclab.io/ecommerce/v1#Supplier"],
+        "properties": {
+            "https://ontologies.anclab.io/ecommerce/v1#hasName": "ACME Corporation",
+            "https://ontologies.anclab.io/ecommerce/v1#hasEmail": "orders@acmecorp.example",
+        },
+    },
+    {
+        "iri": "https://data.anclab.io/ecommerce/category/electronics",
+        "types": ["https://ontologies.anclab.io/ecommerce/v1#Category"],
+        "properties": {
+            "https://ontologies.anclab.io/ecommerce/v1#hasName": "Electronics",
+        },
+    },
+    {
+        "iri": "https://data.anclab.io/ecommerce/product/wireless-headphones-x200",
+        "types": ["https://ontologies.anclab.io/ecommerce/v1#Product"],
+        "properties": {
+            "https://ontologies.anclab.io/ecommerce/v1#hasName": "Wireless Headphones X200",
+            "https://ontologies.anclab.io/ecommerce/v1#hasSKU": "WH-X200-BLK",
+            "https://ontologies.anclab.io/ecommerce/v1#hasPrice": 129.99,
+        },
+    },
+]
+
+for entity in entities:
+    r = requests.post(
+        f"{BASE_URL}/graphs/{graph_id}/entities",
+        json=entity,
+        headers=HEADERS,
+    )
+    print(f"Added entity: {r.json()['iri']}")
+```
+
+</CodeGroup>
+
+### Add Triples / Relationships
+
+With entities in place, assert the object-property relationships that connect them. Post triples directly to the graph's triple endpoint.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/triples \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "triples": [
+      {
+        "subject": "https://data.anclab.io/ecommerce/product/wireless-headphones-x200",
+        "predicate": "https://ontologies.anclab.io/ecommerce/v1#belongsTo",
+        "object": "https://data.anclab.io/ecommerce/category/electronics"
+      },
+      {
+        "subject": "https://data.anclab.io/ecommerce/product/wireless-headphones-x200",
+        "predicate": "https://ontologies.anclab.io/ecommerce/v1#suppliedBy",
+        "object": "https://data.anclab.io/ecommerce/supplier/acme-corp"
+      }
+    ]
+  }'
+```
+
+```python Python
+triples = [
+    {
+        "subject":   "https://data.anclab.io/ecommerce/product/wireless-headphones-x200",
+        "predicate": "https://ontologies.anclab.io/ecommerce/v1#belongsTo",
+        "object":    "https://data.anclab.io/ecommerce/category/electronics",
+    },
+    {
+        "subject":   "https://data.anclab.io/ecommerce/product/wireless-headphones-x200",
+        "predicate": "https://ontologies.anclab.io/ecommerce/v1#suppliedBy",
+        "object":    "https://data.anclab.io/ecommerce/supplier/acme-corp",
+    },
+]
+
+r = requests.post(
+    f"{BASE_URL}/graphs/{graph_id}/triples",
+    json={"triples": triples},
+    headers=HEADERS,
+)
+print(f"Inserted {r.json()['inserted']} triple(s)")
+```
+
+</CodeGroup>
+
+### Bulk Import via RDF File Upload
+
+For large datasets, uploading an RDF file is far more efficient than inserting triples one by one. The platform accepts Turtle (`.ttl`), N-Triples (`.nt`), RDF/XML (`.rdf`), and JSON-LD (`.jsonld`).
+
+<CodeGroup>
+
+```bash curl
+# Upload a Turtle file
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/import \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -F "file=@products-catalog.ttl;type=text/turtle" \
+  -F "namedGraph=https://data.anclab.io/ecommerce/imports/catalog-2024-q1" \
+  -F "validate=true"
+```
+
+```python Python
+with open("products-catalog.ttl", "rb") as f:
+    r = requests.post(
+        f"{BASE_URL}/graphs/{graph_id}/import",
+        headers={"Authorization": "Bearer anchub_sk_..."},
+        files={"file": ("products-catalog.ttl", f, "text/turtle")},
+        data={
+            "namedGraph": "https://data.anclab.io/ecommerce/imports/catalog-2024-q1",
+            "validate": "true",
+        },
+    )
+
+job = r.json()
+print(f"Import job started: {job['jobId']} — status: {job['status']}")
+```
+
+</CodeGroup>
+
+You can also POST a JSON-LD document directly in the request body:
+
+```json
+POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/import
+Content-Type: application/ld+json
+
+{
+  "@context": {
+    "ec":    "https://ontologies.anclab.io/ecommerce/v1#",
+    "xsd":   "http://www.w3.org/2001/XMLSchema#",
+    "label": "https://www.w3.org/2000/01/rdf-schema#label"
+  },
+  "@graph": [
+    {
+      "@id":   "https://data.anclab.io/ecommerce/product/smart-speaker-s1",
+      "@type": "ec:Product",
+      "ec:hasName":  { "@value": "Smart Speaker S1",  "@type": "xsd:string" },
+      "ec:hasSKU":   { "@value": "SS-S1-WHT",         "@type": "xsd:string" },
+      "ec:hasPrice": { "@value": "79.99",              "@type": "xsd:decimal" },
+      "ec:belongsTo": { "@id": "https://data.anclab.io/ecommerce/category/electronics" },
+      "ec:suppliedBy": { "@id": "https://data.anclab.io/ecommerce/supplier/acme-corp" }
+    },
+    {
+      "@id":   "https://data.anclab.io/ecommerce/product/usb-c-hub-h7",
+      "@type": "ec:Product",
+      "ec:hasName":  { "@value": "USB-C Hub H7",  "@type": "xsd:string" },
+      "ec:hasSKU":   { "@value": "UC-HUB-H7-SLV", "@type": "xsd:string" },
+      "ec:hasPrice": { "@value": "49.99",          "@type": "xsd:decimal" },
+      "ec:belongsTo": { "@id": "https://data.anclab.io/ecommerce/category/electronics" },
+      "ec:suppliedBy": { "@id": "https://data.anclab.io/ecommerce/supplier/acme-corp" }
+    }
+  ]
+}
+```
+
+Bulk import runs asynchronously. Poll the job status endpoint until it completes:
+
+```bash
+curl https://api.anclab.io/v1/jobs/job_8yZaBC1234 \
+  -H "Authorization: Bearer anchub_sk_..."
+```
+
+### Verify the Graph
+
+Confirm the import succeeded by checking triple counts and running a quick entity lookup.
+
+<CodeGroup>
+
+```bash curl
+# Get graph statistics
+curl https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/stats \
+  -H "Authorization: Bearer anchub_sk_..."
+
+# Fetch a specific entity
+curl "https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/entities?iri=https%3A%2F%2Fdata.anclab.io%2Fecommerce%2Fproduct%2Fwireless-headphones-x200" \
+  -H "Authorization: Bearer anchub_sk_..."
+```
+
+```python Python
+# Graph statistics
+stats = requests.get(
+    f"{BASE_URL}/graphs/{graph_id}/stats",
+    headers=HEADERS,
+).json()
+
+print(f"Total triples : {stats['tripleCount']}")
+print(f"Named graphs  : {stats['namedGraphCount']}")
+print(f"Entity count  : {stats['entityCount']}")
+
+# Look up a specific entity
+import urllib.parse
+iri = "https://data.anclab.io/ecommerce/product/wireless-headphones-x200"
+entity = requests.get(
+    f"{BASE_URL}/graphs/{graph_id}/entities",
+    params={"iri": iri},
+    headers=HEADERS,
+).json()
+
+print(f"\nEntity: {entity['iri']}")
+for prop, value in entity["properties"].items():
+    print(f"  {prop.split('#')[-1]}: {value}")
+```
+
+</CodeGroup>
+
+A healthy stats response looks like:
+
+```json
+{
+  "graphId": "grph_3mNpQrStuv",
+  "tripleCount": 347,
+  "namedGraphCount": 2,
+  "entityCount": 95,
+  "lastModified": "2024-11-12T09:14:32Z",
+  "ontologyId": "ont_7x9kABcDef",
+  "shaclConformant": true
+}
+```
+
+</Steps>
+
+## Next Steps
+
+Your knowledge graph is populated and validated. Now learn how to query it expressively with SPARQL — continue to [Query Your Knowledge Graph with SPARQL](/guides/semantic-querying).

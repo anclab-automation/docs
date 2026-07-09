@@ -1,0 +1,225 @@
+---
+title: "Semantic Technology: Meaning, Inference, and Linked Data"
+sidebarTitle: "Semantics"
+description: "Explore how semantic technologies assign formal meaning to data, enable automated inference over RDF graphs, and power interoperability via Linked Data."
+---
+
+Semantic technology gives data meaning by attaching formal, machine-interpretable definitions to every concept and relationship in your domain. Rather than storing a value like `"Berlin"` in a column and hoping applications interpret it consistently, you identify it with a URI — `<https://www.wikidata.org/entity/Q64>` — that dereferences to a rich description understood by any standards-compliant system. Add an ontology that defines what a city *is*, how it relates to countries and regions, and what properties it carries, and you have transformed a raw data point into a fact that machines can reason over, interlink, and query semantically.
+
+## Linked Data Principles
+
+Tim Berners-Lee's four Linked Data principles remain the foundation of semantic interoperability:
+
+<Steps>
+  <Step title="Use URIs as Names for Things">
+    Identify every entity — people, organisations, concepts, locations — with a URI. This makes names globally unique and eliminates the ambiguity of local identifiers like `ID=42`.
+  </Step>
+  <Step title="Use HTTP URIs">
+    Choose HTTP URIs so that anyone (human or machine) can look up the URI in a browser or via an API and retrieve a description of the thing.
+  </Step>
+  <Step title="Provide Useful Information via RDF">
+    When a URI is dereferenced, return structured RDF data — facts about that entity using standard vocabularies such as Schema.org, FOAF, or your domain ontology.
+  </Step>
+  <Step title="Include Links to Other URIs">
+    Use `owl:sameAs`, `skos:exactMatch`, and `rdfs:seeAlso` to link your entities to related entities in other datasets, enabling automatic traversal across the web of data.
+  </Step>
+</Steps>
+
+<Info>
+  The global Linked Open Data cloud currently contains more than 1,300 interlinked datasets spanning government, science, geography, and culture. By publishing your own data according to these principles, you make it immediately discoverable and usable by anyone querying that ecosystem.
+</Info>
+
+---
+
+## URI-Based Identification
+
+Every entity in a semantic system carries a URI that uniquely identifies it. Prefix declarations keep your Turtle files readable while preserving global uniqueness.
+
+```turtle
+@prefix schema: <https://schema.org/> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix :       <https://data.anclab.io/entities#> .
+
+# Local entity with a globally unique URI
+:Berlin   a schema:City ;
+          schema:name        "Berlin"@en ;
+          schema:name        "Berlin"@de ;
+          schema:containedInPlace :Germany ;
+          owl:sameAs         <https://www.wikidata.org/entity/Q64> ;
+          owl:sameAs         <http://dbpedia.org/resource/Berlin> .
+```
+
+By asserting `owl:sameAs` links, you tell any OWL reasoner that your local `:Berlin` and Wikidata's `Q64` are the same entity. Queries and inferences that touch either URI automatically apply to both.
+
+---
+
+## Semantic Interoperability
+
+Semantic interoperability means that two systems can exchange data and that the *meaning* is preserved — not just the syntax. You achieve this through:
+
+- **Shared vocabularies** — reusing standard properties like `schema:name`, `dcterms:created`, and `foaf:knows` instead of inventing proprietary ones.
+- **Ontology mappings** — declaring equivalences (`owl:equivalentClass`, `owl:equivalentProperty`) between your ontology terms and those used by partners.
+- **Provenance metadata** — recording where data came from so consumers can assess its quality and trustworthiness.
+
+<Tip>
+  Before defining a new property or class, search existing vocabularies at [Linked Open Vocabularies (LOV)](https://lov.linkeddata.es). Reusing established terms dramatically reduces the mapping work needed to integrate your data with external sources.
+</Tip>
+
+---
+
+## Inference: Deriving New Facts
+
+Inference (also called *reasoning*) is the ability of a semantic system to derive facts that are not explicitly stated. Given a set of axioms in your ontology and a set of asserted triples, an OWL reasoner applies the rules of description logic to produce additional triples automatically.
+
+### A Simple Subclass Inference
+
+```turtle
+# Ontology axioms
+:Engineer   rdfs:subClassOf :Employee .
+:Employee   rdfs:subClassOf :Person .
+
+# Asserted fact
+:Alice   a :Engineer .
+```
+
+After running a reasoner, the following triples are **inferred** even though they were never explicitly written:
+
+```turtle
+:Alice   a :Employee .   # because Engineer subClassOf Employee
+:Alice   a :Person .     # because Employee subClassOf Person
+```
+
+This means a query for all `:Person` instances will return Alice — without you having to manually assert every applicable class for every individual.
+
+### Property Chain Inference
+
+```turtle
+# Axiom: if A locatedIn B and B partOf C, then A locatedIn C
+:locatedIn  owl:propertyChainAxiom ( :locatedIn :partOf ) .
+
+# Asserted facts
+:ANCLab     :locatedIn :Mitte .
+:Mitte      :partOf    :Berlin .
+```
+
+Inferred:
+
+```turtle
+:ANCLab     :locatedIn :Berlin .
+```
+
+---
+
+## RDFS and OWL Reasoning Profiles
+
+Full OWL DL reasoning is expressive but computationally expensive for large datasets. The W3C defines several **OWL 2 profiles** that trade expressive power for scalability.
+
+<AccordionGroup>
+  <Accordion title="RDFS Reasoning">
+    RDFS (RDF Schema) provides the most basic layer: subclass hierarchies (`rdfs:subClassOf`), subproperty hierarchies (`rdfs:subPropertyOf`), and domain/range inference. Most triplestores support RDFS reasoning natively and can handle very large graphs efficiently.
+
+    ```turtle
+    # RDFS inference example
+    :publishes   rdfs:subPropertyOf  :produces .
+
+    :ANCLab      :publishes   :Report2024 .
+    # Inferred: :ANCLab :produces :Report2024 .
+    ```
+  </Accordion>
+
+  <Accordion title="OWL 2 EL — Expressive but Tractable">
+    **OWL 2 EL** (Existential Language) is designed for ontologies with very large numbers of classes and properties, such as SNOMED CT (300,000+ concepts). It supports existential restrictions and class hierarchies, and reasoners like ELK can classify millions of axioms in seconds. Use OWL 2 EL for large biomedical or enterprise taxonomies.
+  </Accordion>
+
+  <Accordion title="OWL 2 QL — Query-Optimised">
+    **OWL 2 QL** (Query Language) is optimised for query rewriting over relational databases. It guarantees that SPARQL queries can be rewritten into first-order logic queries executable against a SQL backend. Use OWL 2 QL when your data lives in a relational store and you want semantic query enrichment without migrating to a triplestore.
+  </Accordion>
+
+  <Accordion title="OWL 2 RL — Rule-Based Scalability">
+    **OWL 2 RL** (Rule Language) expresses reasoning as production rules that can be implemented directly in a triplestore's inference engine or as SPARQL CONSTRUCT queries. It supports a broad subset of OWL 2, including property characteristics (transitivity, symmetry, inverse). Use OWL 2 RL when you need rich reasoning at scale in a standard triplestore.
+  </Accordion>
+
+  <Accordion title="Full OWL DL — Maximum Expressivity">
+    **OWL 2 DL** gives you the full power of description logic: nominals, universal and existential restrictions, complex cardinality, disjoint unions, and more. Reasoners such as HermiT and Pellet can check consistency and compute the complete inferred hierarchy, but they are practical only for ontologies in the tens of thousands of axioms, not billions of triples.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  Start with **OWL 2 RL** if you are deploying to a standard triplestore and need a good balance of expressive power and scalability. Move to **OWL 2 EL** if you have a large class hierarchy in a specialised domain like biomedicine. Only reach for full **OWL 2 DL** when you need consistency checking during ontology engineering, not at query time over production data.
+</Tip>
+
+---
+
+## Semantic Similarity and Smart Search
+
+Once your entities carry semantic types and sit within a class hierarchy, you can compute **semantic similarity** — a measure of how conceptually related two entities are. This underpins smarter search, recommendations, and entity disambiguation.
+
+### How It Works
+
+Two approaches are common:
+
+1. **Hierarchy-based similarity** — entities that share a closer common ancestor in the class hierarchy are more similar. The Wu-Palmer and Resnik measures formalise this.
+2. **Embedding-based similarity** — you train an RDF2Vec or TransE model on the graph topology, producing dense vector representations. Cosine distance between vectors reflects relational proximity.
+
+### SPARQL Query: Find Semantically Related Entities
+
+```sparql
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX :     <https://ontology.anclab.io/core#>
+
+# Find all entities that share a superclass with :Ibuprofen
+# (i.e., sibling concepts in the ontology hierarchy)
+SELECT DISTINCT ?sibling ?siblingLabel
+WHERE {
+  :Ibuprofen rdfs:subClassOf+ ?parent .
+  ?sibling   rdfs:subClassOf+ ?parent .
+  ?sibling   rdfs:label        ?siblingLabel .
+  FILTER (?sibling != :Ibuprofen)
+}
+ORDER BY ?siblingLabel
+```
+
+You can feed these results directly into a recommendation engine: if a user is viewing `:Ibuprofen`, surface its ontology siblings as "related items."
+
+---
+
+## Linked Data in Practice
+
+```turtle
+@prefix dcat:  <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix :      <https://data.anclab.io/catalog#> .
+
+# A published RDF dataset described with DCAT
+:KnowledgeGraphDataset  a dcat:Dataset ;
+    dcterms:title       "ANC Lab Enterprise Knowledge Graph"@en ;
+    dcterms:description "RDF dataset covering organisational structure, projects, and publications."@en ;
+    dcterms:license     <https://creativecommons.org/licenses/by/4.0/> ;
+    dcterms:modified    "2024-06-01"^^xsd:date ;
+    dcat:distribution   :TurtleDump , :SPARQLEndpoint .
+
+:SPARQLEndpoint   a dcat:DataService ;
+    dcat:endpointURL  <https://sparql.anclab.io/query> ;
+    dcat:servesDataset :KnowledgeGraphDataset .
+```
+
+Publishing your graph with DCAT metadata makes it discoverable by data catalogues and portals — and any consumer that dereferences your URIs gets back structured RDF they can immediately integrate.
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Ontology" icon="sitemap" href="/concepts/ontology">
+    Review how OWL axioms drive the inference rules described on this page.
+  </Card>
+  <Card title="Knowledge Graphs" icon="diagram-project" href="/concepts/knowledge-graphs">
+    See how the data layer of a knowledge graph is populated with individuals and triples.
+  </Card>
+  <Card title="Graph Analytics" icon="chart-network" href="/concepts/data-analytics">
+    Apply semantic class hierarchies to enrich aggregation and traversal analytics.
+  </Card>
+  <Card title="Inference Rules" icon="gear" href="/query/inference-rules">
+    Configure OWL 2 RL inference in your triplestore for production deployments.
+  </Card>
+</CardGroup>

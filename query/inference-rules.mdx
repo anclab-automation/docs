@@ -1,0 +1,413 @@
+---
+title: "Inference Rules: Deriving New Knowledge Automatically"
+sidebarTitle: "Inference Rules"
+description: "Automatically derive new triples from existing data using RDFS, OWL RL, and custom SWRL rules — and query both asserted and inferred knowledge."
+---
+
+Inference — also called *reasoning* — is the process of automatically deriving new RDF triples from the ones you have already stored, guided by a set of logical rules. Instead of manually enumerating every fact, you declare the schema and axioms once, and the reasoner fills in the consequences. For example, if you state that `ex:Car rdfs:subClassOf ex:Vehicle` and then assert `ex:ModelS rdf:type ex:Car`, the reasoner infers `ex:ModelS rdf:type ex:Vehicle` without any further action from you. This page explains the inference profiles available in the ANC Lab Knowledge Hub, shows concrete before-and-after examples, and guides you through enabling inference via the API.
+
+## How Inference Works
+
+The Knowledge Hub stores two kinds of triples:
+
+- **Asserted triples** — facts you loaded or inserted directly.
+- **Inferred triples** — facts the reasoner derived by applying rules to asserted triples (or to other inferred triples).
+
+When you query the graph with inference enabled, both sets are visible together. You can also query each set independently (see [Querying Asserted vs. Inferred Triples](#querying-asserted-vs-inferred-triples)).
+
+<Note>
+  The Knowledge Hub supports two inference modes:
+
+  - **On-the-fly (query-time) inference** — rules are applied during query execution. No extra storage is needed, but each query pays the reasoning cost. Best for small graphs or exploratory work.
+  - **Materialized inference** — the reasoner runs as a separate step and writes inferred triples back into the graph. Queries run fast because they read pre-computed triples. Best for large, stable graphs where inference results change infrequently.
+
+  Switch between modes in your graph settings or via the `mode` parameter on the `/infer` endpoint.
+</Note>
+
+---
+
+## Built-in Inference Profiles
+
+### 1. RDFS Inference
+
+RDFS inference implements the [W3C RDFS entailment rules](https://www.w3.org/TR/rdf-mt/#RDFSRules). Enable it to automatically propagate class hierarchies, property hierarchies, domain constraints, and range constraints.
+
+#### `rdfs:subClassOf` — Class Hierarchy Propagation
+
+If `A rdfs:subClassOf B` and an individual is typed as `A`, the reasoner infers it is also of type `B`.
+
+**Before inference (asserted triples):**
+
+```turtle
+ex:Car          rdfs:subClassOf ex:Vehicle .
+ex:ElectricCar  rdfs:subClassOf ex:Car .
+ex:ModelS       rdf:type        ex:ElectricCar .
+```
+
+**After RDFS inference (new triples added):**
+
+```turtle
+ex:ModelS  rdf:type  ex:Car .       # inferred from subClassOf chain
+ex:ModelS  rdf:type  ex:Vehicle .   # inferred transitively
+```
+
+#### `rdfs:subPropertyOf` — Property Hierarchy Propagation
+
+If `p rdfs:subPropertyOf q` and a triple uses `p`, the reasoner infers the same triple with `q`.
+
+```turtle
+# Asserted
+ex:fatherOf  rdfs:subPropertyOf  ex:parentOf .
+ex:Alice     ex:fatherOf         ex:Bob .
+
+# Inferred
+ex:Alice     ex:parentOf         ex:Bob .
+```
+
+#### `rdfs:domain` and `rdfs:range` — Type Propagation
+
+```turtle
+# Asserted
+ex:hasBirthplace  rdfs:domain  ex:Person .
+ex:hasBirthplace  rdfs:range   ex:Place .
+ex:Ada            ex:hasBirthplace  ex:London .
+
+# Inferred
+ex:Ada     rdf:type  ex:Person .   # from domain
+ex:London  rdf:type  ex:Place .    # from range
+```
+
+---
+
+### 2. OWL RL Inference
+
+OWL RL (Rule Language) is a profile of OWL 2 designed for efficient rule-based reasoning over large datasets. It covers class expressions, property characteristics, and key axioms that go beyond RDFS.
+
+#### Transitive Properties
+
+If `p` is declared `owl:TransitiveProperty`, chains of `p` triples collapse into direct assertions.
+
+```turtle
+# Asserted
+ex:locatedIn  rdf:type      owl:TransitiveProperty .
+ex:Paris      ex:locatedIn  ex:France .
+ex:France     ex:locatedIn  ex:Europe .
+
+# Inferred
+ex:Paris  ex:locatedIn  ex:Europe .
+```
+
+#### Symmetric Properties
+
+If `p` is `owl:SymmetricProperty`, every `(s, p, o)` generates a reverse `(o, p, s)`.
+
+```turtle
+# Asserted
+ex:marriedTo  rdf:type  owl:SymmetricProperty .
+ex:Alice      ex:marriedTo  ex:Bob .
+
+# Inferred
+ex:Bob  ex:marriedTo  ex:Alice .
+```
+
+#### Inverse Properties
+
+`owl:inverseOf` lets you declare two properties as each other's inverse.
+
+```turtle
+# Asserted
+ex:hasPart  owl:inverseOf  ex:partOf .
+ex:Engine   ex:partOf      ex:Car .
+
+# Inferred
+ex:Car  ex:hasPart  ex:Engine .
+```
+
+#### `owl:sameAs` — Entity Merging
+
+Declaring two IRIs as `owl:sameAs` makes all triples on one entity visible on the other.
+
+```turtle
+# Asserted
+ex:CompanyA  owl:sameAs        ex:CorpA .
+ex:CompanyA  ex:foundedIn      "1998"^^xsd:gYear .
+
+# Inferred
+ex:CorpA     ex:foundedIn      "1998"^^xsd:gYear .
+```
+
+#### `owl:FunctionalProperty` — Uniqueness Constraints
+
+If `p` is a functional property, two objects sharing the same subject and predicate are inferred to be `owl:sameAs`.
+
+```turtle
+# Asserted
+ex:nationalID  rdf:type            owl:FunctionalProperty .
+ex:PersonX     ex:nationalID       "AB-1234" .
+ex:PersonY     ex:nationalID       "AB-1234" .
+
+# Inferred
+ex:PersonX     owl:sameAs          ex:PersonY .
+```
+
+---
+
+### 3. Custom Rules
+
+When built-in profiles are not expressive enough, define your own rules using **SWRL** (Semantic Web Rule Language) or **SPIN** (SPARQL Inferencing Notation).
+
+#### SWRL Rule Example
+
+This rule infers a `ex:grandparentOf` relationship from two `ex:parentOf` triples:
+
+```xml
+<!-- SWRL rule in RDF/XML -->
+<rdf:Description rdf:about="ex:GrandparentRule">
+  <rdf:type rdf:resource="swrl:Imp"/>
+  <swrl:body>
+    <swrl:AtomList>
+      <rdf:first>
+        <swrl:IndividualPropertyAtom>
+          <swrl:propertyPredicate rdf:resource="ex:parentOf"/>
+          <swrl:argument1 rdf:resource="swrl:var#x"/>
+          <swrl:argument2 rdf:resource="swrl:var#y"/>
+        </swrl:IndividualPropertyAtom>
+      </rdf:first>
+      <rdf:rest>
+        <swrl:AtomList>
+          <rdf:first>
+            <swrl:IndividualPropertyAtom>
+              <swrl:propertyPredicate rdf:resource="ex:parentOf"/>
+              <swrl:argument1 rdf:resource="swrl:var#y"/>
+              <swrl:argument2 rdf:resource="swrl:var#z"/>
+            </swrl:IndividualPropertyAtom>
+          </rdf:first>
+          <rdf:rest rdf:resource="rdf:nil"/>
+        </swrl:AtomList>
+      </rdf:rest>
+    </swrl:AtomList>
+  </swrl:body>
+  <swrl:head>
+    <swrl:AtomList>
+      <rdf:first>
+        <swrl:IndividualPropertyAtom>
+          <swrl:propertyPredicate rdf:resource="ex:grandparentOf"/>
+          <swrl:argument1 rdf:resource="swrl:var#x"/>
+          <swrl:argument2 rdf:resource="swrl:var#z"/>
+        </swrl:IndividualPropertyAtom>
+      </rdf:first>
+      <rdf:rest rdf:resource="rdf:nil"/>
+    </swrl:AtomList>
+  </swrl:head>
+</rdf:Description>
+```
+
+#### SPIN Rule Example
+
+SPIN expresses rules as SPARQL `CONSTRUCT` queries stored in the ontology graph, making them easier to read and maintain:
+
+```turtle
+ex:GrandparentRule
+    rdf:type        sp:Construct ;
+    sp:text         """
+        PREFIX ex: <https://data.anclab.io/example#>
+        CONSTRUCT {
+          ?x ex:grandparentOf ?z .
+        }
+        WHERE {
+          ?x ex:parentOf ?y .
+          ?y ex:parentOf ?z .
+        }
+    """ .
+```
+
+Upload SPIN rules as part of your ontology graph — the reasoner picks them up automatically on the next inference run.
+
+---
+
+## Enabling Inference on a Graph
+
+### Via Graph Settings (UI)
+
+Open your graph in the Knowledge Hub dashboard, navigate to **Settings → Reasoning**, choose an inference profile (`RDFS`, `OWL RL`, or `Custom`), and toggle **Inference enabled**. Select `On-the-fly` or `Materialized` mode, then click **Save**.
+
+### Via the API — Trigger an Inference Run
+
+To trigger a one-time (or scheduled) materialization run, call the `/infer` endpoint:
+
+```http
+POST /v1/graphs/g-7f3a2c1d/infer HTTP/1.1
+Host: api.anclab.io
+Authorization: Bearer anchub_sk_••••••••••••••••
+Content-Type: application/json
+
+{
+  "profile":    "owl-rl",
+  "mode":       "materialized",
+  "custom_rules": [],
+  "dry_run":    false
+}
+```
+
+| Parameter       | Type    | Description                                                                 |
+| --------------- | ------- | --------------------------------------------------------------------------- |
+| `profile`       | string  | `"rdfs"`, `"owl-rl"`, or `"custom"`                                         |
+| `mode`          | string  | `"on-the-fly"` (query-time) or `"materialized"` (write results to graph)    |
+| `custom_rules`  | array   | IRIs of SWRL/SPIN rule resources to include (profile `"custom"` only)       |
+| `dry_run`       | boolean | When `true`, returns a count of triples that *would* be inferred without writing |
+
+**Response:**
+
+```json
+{
+  "job_id":           "inf-4c91a3e2",
+  "graph_id":         "g-7f3a2c1d",
+  "status":           "running",
+  "profile":          "owl-rl",
+  "mode":             "materialized",
+  "triples_before":   48320,
+  "estimated_new":    1740,
+  "started_at":       "2025-09-14T10:22:05Z"
+}
+```
+
+Poll `GET /v1/jobs/inf-4c91a3e2` until `"status"` is `"complete"` or `"failed"`.
+
+---
+
+## Querying Asserted vs. Inferred Triples
+
+When materialized inference is active, inferred triples are stored in a system-managed named graph alongside your asserted triples. Use the following patterns to distinguish them.
+
+<Tabs>
+  <Tab title="Query Both (default)">
+    Omit any `GRAPH` restriction. The default dataset includes both asserted and inferred triples.
+
+    ```sparql
+    PREFIX ex: <https://data.anclab.io/example#>
+
+    SELECT ?vehicle
+    WHERE {
+      ?vehicle rdf:type ex:Vehicle .
+    }
+    ```
+  </Tab>
+  <Tab title="Asserted Triples Only">
+    Target your specific named graph and exclude the inferred graph.
+
+    ```sparql
+    PREFIX ex: <https://data.anclab.io/example#>
+
+    SELECT ?vehicle
+    WHERE {
+      GRAPH <https://data.anclab.io/graphs/fleet> {
+        ?vehicle rdf:type ex:Vehicle .
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Inferred Triples Only">
+    Target the system inference graph, which is the graph IRI suffixed with `/inferred`.
+
+    ```sparql
+    PREFIX ex: <https://data.anclab.io/example#>
+
+    SELECT ?vehicle
+    WHERE {
+      GRAPH <https://data.anclab.io/graphs/fleet/inferred> {
+        ?vehicle rdf:type ex:Vehicle .
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Count Asserted vs. Inferred">
+    Compare the size of both graphs to understand what the reasoner added.
+
+    ```sparql
+    SELECT ?graph (COUNT(*) AS ?tripleCount)
+    WHERE {
+      VALUES ?graph {
+        <https://data.anclab.io/graphs/fleet>
+        <https://data.anclab.io/graphs/fleet/inferred>
+      }
+      GRAPH ?graph { ?s ?p ?o }
+    }
+    GROUP BY ?graph
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Validating Inference Results with SHACL
+
+After a reasoning run, validate that the inferred triples conform to your constraints before promoting them to production. Call the validation endpoint:
+
+```http
+POST /v1/graphs/g-7f3a2c1d/validate HTTP/1.1
+Host: api.anclab.io
+Authorization: Bearer anchub_sk_••••••••••••••••
+Content-Type: application/json
+
+{
+  "shapes_graph": "https://data.anclab.io/graphs/fleet-shapes",
+  "include_inferred": true
+}
+```
+
+<Tip>
+  Run SHACL validation immediately after every materialized inference job — especially when using custom SWRL/SPIN rules. Inference can propagate errors from incorrect axioms across thousands of nodes. Catching a single wrong `owl:sameAs` assertion early prevents a cascade of bogus inferred triples that are expensive to retract.
+</Tip>
+
+---
+
+## Open World vs. Closed World Assumption
+
+<Warning>
+  RDF and OWL operate under the **Open World Assumption (OWA)**: the absence of a triple is *not* evidence that it is false — the fact may simply be unknown. This is the opposite of relational databases, which use the **Closed World Assumption (CWA)** (if a row does not exist, the fact is false).
+
+  Concretely: if your graph does not contain `ex:ModelS ex:inStock false`, OWL reasoning will *not* infer that the Model S is in stock (nor that it is not). It will simply remain unknown. Be cautious when writing rules that rely on the absence of triples, and avoid SPARQL `FILTER NOT EXISTS` patterns as a substitute for negation-as-failure in a reasoning context — the results may surprise you.
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Retracting Inferred Triples">
+    To remove all materialized inferred triples and re-run inference from scratch, call the infer endpoint with the `reset` flag:
+
+    ```json
+    {
+      "profile": "owl-rl",
+      "mode":    "materialized",
+      "reset":   true
+    }
+    ```
+
+    The engine clears the `/inferred` named graph before applying rules, ensuring you never serve stale inferences after an ontology change.
+  </Accordion>
+  <Accordion title="Incremental Inference">
+    For frequently updated graphs, use incremental mode to reason only over newly added triples since the last run:
+
+    ```json
+    {
+      "profile":     "rdfs",
+      "mode":        "materialized",
+      "incremental": true,
+      "since":       "2025-09-13T00:00:00Z"
+    }
+    ```
+
+    Incremental inference is significantly faster for large graphs but assumes the previous inference state was correct. Run a full reset periodically to catch any accumulated drift.
+  </Accordion>
+  <Accordion title="Inference Profile Comparison">
+    | Feature                        | RDFS | OWL RL | Custom |
+    | ------------------------------ | :--: | :----: | :----: |
+    | `subClassOf` propagation       | ✅   | ✅     | ✅     |
+    | `subPropertyOf` propagation    | ✅   | ✅     | ✅     |
+    | `domain` / `range` typing      | ✅   | ✅     | ✅     |
+    | Transitive properties          | ❌   | ✅     | ✅     |
+    | Symmetric / inverse properties | ❌   | ✅     | ✅     |
+    | `owl:sameAs` merging           | ❌   | ✅     | ✅     |
+    | Functional / inverse-functional| ❌   | ✅     | ✅     |
+    | User-defined rules (SWRL/SPIN) | ❌   | ❌     | ✅     |
+    | Typical runtime (large graphs) | Fast | Medium | Varies |
+  </Accordion>
+</AccordionGroup>

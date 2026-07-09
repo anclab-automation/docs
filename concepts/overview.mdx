@@ -1,0 +1,65 @@
+---
+title: "Platform Overview: How ANC Lab Knowledge Hub Works"
+sidebarTitle: "Overview"
+description: "Understand the four pillars of ANC Lab Knowledge Hub — Ontology, Knowledge Graphs, Semantics, and Analytics — and how they work together."
+---
+
+ANC Lab Knowledge Hub organizes its capabilities around four interconnected pillars: Ontology, Knowledge Graphs, Semantics, and Analytics. Each pillar builds on the one before it — your ontology defines the structure, your knowledge graph instantiates that structure with real data, semantic reasoning enriches what the graph knows, and analytics transforms that enriched graph into actionable insight. Understanding how these layers relate helps you design better models, write more effective queries, and extract more value from your data.
+
+## The Four Pillars
+
+<CardGroup cols={2}>
+  <Card title="Ontology" icon="sitemap" href="/concepts/ontology">
+    Define the vocabulary of your domain — classes, properties, hierarchies, and constraints — using RDF, OWL, and SKOS.
+  </Card>
+  <Card title="Knowledge Graphs" icon="diagram-project" href="/concepts/knowledge-graphs">
+    Instantiate your ontology with real-world entities and relationships, forming a rich, traversable graph of connected data.
+  </Card>
+  <Card title="Semantics" icon="brain" href="/concepts/semantics">
+    Apply inference rules and SHACL constraints to derive implicit knowledge, validate data quality, and power expressive SPARQL queries.
+  </Card>
+  <Card title="Analytics" icon="chart-bar" href="/concepts/data-analytics">
+    Measure graph structure, analyze connectivity patterns, and visualize trends to turn your knowledge graph into business intelligence.
+  </Card>
+</CardGroup>
+
+## How the Pillars Connect
+
+The four pillars are not independent modules — they form a pipeline where each layer depends on and enhances the layer beneath it.
+
+### Ontology → Structure
+
+An ontology is the schema of your knowledge graph. It defines what kinds of things exist in your domain (`Researcher`, `Publication`, `Institution`), what properties describe them (`authoredBy`, `affiliatedWith`), and what rules govern valid data (`a Researcher must have at least one affiliation`). Without an ontology, a knowledge graph is just a collection of arbitrary triples. With one, every entity has a type, every relationship has a meaning, and the graph becomes self-describing.
+
+### Knowledge Graphs → Data
+
+Once you have an ontology, you populate it with individuals — specific entities like *Alice Chen* or *University of Edinburgh* — and the relationships between them. This is your knowledge graph: the ontology brought to life with real data. The graph can grow incrementally as you ingest new sources, and because it inherits the structure of your ontology, every new triple is immediately interpretable.
+
+### Semantics → Reasoning
+
+A knowledge graph stores only what you explicitly assert. Semantics lets you go further. By applying OWL axioms — such as transitivity, inverse properties, and class equivalences — the reasoning engine derives new facts that were never directly stated. SHACL constraints let you validate that your graph conforms to the rules your ontology defines. SPARQL queries then tap into both the asserted and the inferred graph, giving you answers that a purely literal query could never produce.
+
+### Analytics → Insight
+
+With a validated, inference-enriched graph, the analytics layer measures and visualizes the knowledge embedded in the structure itself. Graph metrics such as degree distribution, betweenness centrality, and community clusters reveal how entities relate at scale. You can track how the graph evolves over time, identify gaps in coverage, and surface the most connected or influential nodes — insights that are invisible in tabular data but immediately apparent in a well-structured knowledge graph.
+
+## Recommended Reading Order
+
+<Tip>
+  If you're new to the platform, read the concept pages in pillar order: start with **Ontology** to understand how to model your domain, move to **Knowledge Graphs** to learn how to populate it, then read **Semantics** to unlock reasoning, and finish with **Analytics** to see how to derive insights. This sequence mirrors the natural workflow you'll follow when building a real project.
+</Tip>
+
+## Standards Reference
+
+Each pillar relies on established W3C standards that ensure your data remains portable and interoperable across tools and platforms.
+
+| Pillar | Standards |
+|--------|-----------|
+| Ontology | RDF, OWL 2, SKOS |
+| Knowledge Graphs | RDF, Turtle, JSON-LD |
+| Semantics | OWL 2 RL/EL, SHACL, SPARQL 1.1 |
+| Analytics | SPARQL 1.1 aggregates, GraphQL (export) |
+
+<Info>
+  ANC Lab Knowledge Hub stores all graph data as RDF natively, which means you can export any ontology or knowledge graph as a standards-compliant Turtle, N-Triples, or JSON-LD file at any time — no vendor lock-in.
+</Info>

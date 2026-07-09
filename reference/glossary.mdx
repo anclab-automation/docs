@@ -1,0 +1,159 @@
+---
+title: "Glossary of Ontology and Knowledge Graph Terms"
+sidebarTitle: "Glossary"
+description: "Definitions of key terms used across ontology, knowledge graphs, semantics, and analytics in the ANC Lab Knowledge Hub platform."
+---
+
+The terminology used in ontology engineering, knowledge graphs, and semantic technologies can be dense. Use this glossary as a quick reference whenever you encounter an unfamiliar term in the platform, the documentation, or the broader W3C standards landscape. Definitions are kept practical and jargon-light so you can get back to building quickly.
+
+<AccordionGroup>
+
+  <Accordion title="Axiom">
+    An axiom is a logical statement that you declare as unconditionally true within an ontology. Axioms define the rules of the domain — for example, asserting that every `Employee` must belong to exactly one `Department`. Reasoners use axioms to derive new facts and detect inconsistencies in your data.
+  </Accordion>
+
+  <Accordion title="Blank Node">
+    A blank node is an RDF resource that has no globally unique IRI — it exists only within the scope of a single document or dataset. You typically use blank nodes to represent complex structures (like addresses or measurements) that don't need a standalone identifier. Blank nodes are written as `_:label` in Turtle syntax.
+  </Accordion>
+
+  <Accordion title="Class">
+    A class is a named category or type in an ontology that groups individuals sharing common characteristics. For example, `Person` and `Organisation` are classes. You define classes in OWL or RDFS and then assert that specific individuals are members (instances) of those classes.
+  </Accordion>
+
+  <Accordion title="Dataset">
+    A dataset in the RDF sense is a collection of one default graph and zero or more named graphs, all treated as a single logical unit. SPARQL queries operate over datasets. In the Knowledge Hub, a dataset maps to a named container you create to hold related graph data.
+  </Accordion>
+
+  <Accordion title="Datatype">
+    A datatype specifies the kind of value carried by an RDF literal, such as `xsd:integer`, `xsd:date`, or `xsd:string`. Assigning the correct datatype lets reasoners and query engines compare, sort, and validate values correctly. Most built-in datatypes come from the XML Schema Definition (XSD) vocabulary.
+  </Accordion>
+
+  <Accordion title="Entity Linking">
+    Entity linking is the process of connecting a mention of a real-world entity in text or data to its canonical node in a knowledge graph. For example, linking the string "Paris" to the node `dbpedia:Paris` resolves ambiguity and enables cross-dataset integration. The Knowledge Hub supports entity linking via `owl:sameAs` assertions and integration APIs.
+  </Accordion>
+
+  <Accordion title="Entailment">
+    Entailment describes the relationship where one set of RDF statements logically implies another. If graph A entails graph B, then every model satisfying A also satisfies B. Different entailment regimes (Simple, RDF, RDFS, OWL) define progressively richer sets of inferred consequences the platform can materialise.
+  </Accordion>
+
+  <Accordion title="Graph Centrality">
+    Graph centrality measures how "important" or "influential" a node is within a graph topology. Common metrics include degree centrality (number of direct connections), betweenness centrality (how often a node lies on shortest paths), and PageRank. Use centrality analytics in the Knowledge Hub to surface the most connected entities in your knowledge graph.
+  </Accordion>
+
+  <Accordion title="Graph Traversal">
+    Graph traversal is the process of visiting nodes and edges in a graph by following relationships from a starting point. Breadth-first traversal explores neighbours level by level, while depth-first traversal dives down a path before backtracking. SPARQL property paths give you a declarative way to express traversal patterns in your queries.
+  </Accordion>
+
+  <Accordion title="Individual">
+    An individual (also called an instance) is a specific, named member of a class in an ontology. Where a class defines the category, an individual represents a concrete thing — for example, `:AcmeCorp` as an instance of `Organisation`. You can assert properties and relationships directly on individuals.
+  </Accordion>
+
+  <Accordion title="Inference">
+    Inference is the automatic derivation of new, implicit facts from the explicit facts and axioms already in your knowledge graph. For example, if you state that `:alice :hasParent :bob` and your ontology says `hasParent` is the inverse of `hasChild`, a reasoner infers `:bob :hasChild :alice`. Enabling inference enriches your data without manual assertion.
+  </Accordion>
+
+  <Accordion title="IRI">
+    An IRI (Internationalized Resource Identifier) is the global identifier for a resource in RDF — the web-scale equivalent of a primary key. IRIs extend URIs by allowing Unicode characters, making them suitable for non-Latin scripts. Every named class, property, and individual in your ontology should have a stable, dereferenceable IRI.
+  </Accordion>
+
+  <Accordion title="Knowledge Graph">
+    A knowledge graph is a graph-structured data store that represents real-world entities and the relationships between them using a standardised data model (typically RDF). It combines a flexible schema (the ontology) with instance data to enable rich querying, reasoning, and integration across domains. The ANC Lab Knowledge Hub is built around this paradigm.
+  </Accordion>
+
+  <Accordion title="Linked Data">
+    Linked Data is a set of best practices for publishing structured data on the web so that machines can discover and navigate it. The four principles — use URIs as names, make them HTTP-dereferenceable, return useful RDF, and include links to other URIs — enable a global web of interconnected datasets. The Knowledge Hub makes it straightforward to publish your graphs as Linked Data.
+  </Accordion>
+
+  <Accordion title="Literal">
+    A literal is an RDF value that represents raw data rather than a resource — such as a string, number, date, or boolean. Literals always appear as the object of a triple and carry an optional language tag (e.g., `"hello"@en`) or datatype (e.g., `"42"^^xsd:integer`). They cannot be the subject or predicate of a triple.
+  </Accordion>
+
+  <Accordion title="Named Graph">
+    A named graph is an RDF graph that has been assigned an IRI, allowing you to reference and query it by name. Named graphs let you track provenance (where data came from), apply access controls per graph, and compose datasets from multiple sources. In SPARQL, you target named graphs with the `GRAPH` keyword.
+  </Accordion>
+
+  <Accordion title="Namespace">
+    A namespace is a shared prefix that scopes a set of related IRIs and prevents naming collisions across vocabularies. For example, the RDF namespace `http://www.w3.org/1999/02/22-rdf-syntax-ns#` is conventionally abbreviated as `rdf:`. In Turtle, you declare namespaces with `@prefix` so your files stay readable.
+  </Accordion>
+
+  <Accordion title="Ontology">
+    An ontology is a formal, explicit specification of the concepts, relationships, and rules that exist within a given domain. It provides the shared vocabulary and logical structure that gives your knowledge graph its meaning. Ontologies are typically authored in OWL or RDFS and can be reused, extended, and combined across projects.
+  </Accordion>
+
+  <Accordion title="OWL">
+    OWL (Web Ontology Language) is the W3C standard language for authoring rich, expressive ontologies on the Semantic Web. OWL extends RDFS with powerful constructs such as property restrictions, cardinality constraints, disjointness axioms, and complex class expressions. The Knowledge Hub supports all OWL 2 profiles — EL, QL, RL, DL, and Full.
+  </Accordion>
+
+  <Accordion title="owl:sameAs">
+    `owl:sameAs` is a built-in OWL property that asserts two IRIs refer to the same real-world entity. It is the cornerstone of cross-dataset entity linking in Linked Data. Use it carefully: a reasoner will merge all property values from both nodes, so accidental `owl:sameAs` assertions can propagate unintended data.
+  </Accordion>
+
+  <Accordion title="Path Analysis">
+    Path analysis examines the routes connecting two or more nodes in a graph, typically to discover shortest paths, all available paths, or paths satisfying specific constraints. In the Knowledge Hub, path analysis helps you answer questions like "How is entity A related to entity B, and through what chain of relationships?"
+  </Accordion>
+
+  <Accordion title="Predicate">
+    In RDF, a predicate (also called a property) is the relationship that connects a subject to an object in a triple. Predicates must be IRIs and are defined in your ontology or an imported vocabulary. For example, in the triple `:alice :knows :bob`, `:knows` is the predicate.
+  </Accordion>
+
+  <Accordion title="Property">
+    A property is a named relationship or attribute defined in an ontology. Object properties link two individuals (e.g., `:worksFor`), while datatype properties link an individual to a literal value (e.g., `:birthDate`). Annotation properties carry metadata such as labels and comments. You can constrain properties with domain, range, cardinality, and other axioms.
+  </Accordion>
+
+  <Accordion title="Quad">
+    A quad extends the RDF triple by adding a fourth component — a graph name (IRI or blank node) — to indicate which named graph the triple belongs to. Quads are the native unit in formats like N-Quads and TriG. They enable you to manage and query multiple graphs within a single dataset cleanly.
+  </Accordion>
+
+  <Accordion title="RDF">
+    RDF (Resource Description Framework) is the W3C foundational data model for the Semantic Web. Every piece of data is expressed as a subject–predicate–object triple, forming a directed, labelled graph. RDF is serialization-agnostic — the same graph can be expressed in Turtle, JSON-LD, N-Triples, RDF/XML, and other formats.
+  </Accordion>
+
+  <Accordion title="RDFS">
+    RDFS (RDF Schema) is a lightweight vocabulary for describing the structure of RDF data. It introduces constructs like `rdfs:Class`, `rdfs:subClassOf`, `rdfs:domain`, and `rdfs:range`, giving you a basic type system on top of plain RDF. RDFS reasoning is simpler and faster than full OWL reasoning, making it a good fit for large, loosely structured datasets.
+  </Accordion>
+
+  <Accordion title="Reasoning">
+    Reasoning is the computational process of applying logical rules and axioms to derive all facts entailed by your knowledge graph. A reasoner checks consistency (are there contradictions?), classifies the hierarchy (which classes subsume others?), and realises individuals (which classes does each individual belong to?). The Knowledge Hub offers configurable reasoning profiles to balance completeness and performance.
+  </Accordion>
+
+  <Accordion title="Semantic Similarity">
+    Semantic similarity quantifies how conceptually close two terms or entities are, based on their positions in an ontology or their shared properties in a knowledge graph. It powers features like "related concepts" suggestions and duplicate detection. Common measures include path-based distance, information content, and embedding-based cosine similarity.
+  </Accordion>
+
+  <Accordion title="SHACL">
+    SHACL (Shapes Constraint Language) is the W3C standard for validating RDF graphs against a set of conditions called shapes. You define what a well-formed node looks like — required properties, value types, cardinality — and SHACL validation reports which nodes violate those constraints. Use SHACL in the Knowledge Hub to enforce data quality before and after ingestion.
+  </Accordion>
+
+  <Accordion title="SPARQL">
+    SPARQL (SPARQL Protocol and RDF Query Language) is the W3C standard query language for RDF data. It supports `SELECT` (tabular results), `CONSTRUCT` (new graphs), `ASK` (boolean checks), and `DESCRIBE` (resource descriptions), plus `UPDATE` for graph mutations. The Knowledge Hub exposes a fully compliant SPARQL 1.1 endpoint for every dataset.
+  </Accordion>
+
+  <Accordion title="Subject">
+    In an RDF triple, the subject is the resource being described — the "thing" the statement is about. Subjects must be IRIs or blank nodes; they cannot be literals. For example, in `:alice :knows :bob`, `:alice` is the subject.
+  </Accordion>
+
+  <Accordion title="Subgraph">
+    A subgraph is any subset of the nodes and edges of a larger graph that forms a valid graph in its own right. You use subgraph extraction to isolate a domain of interest, share a portion of your knowledge graph, or run focused analytics without processing the entire dataset.
+  </Accordion>
+
+  <Accordion title="SWRL">
+    SWRL (Semantic Web Rule Language) combines OWL with RuleML to let you write Horn-clause rules that derive new facts not expressible in OWL alone. A SWRL rule consists of an antecedent (body) and a consequent (head), both expressed as conjunctions of OWL atoms. Use SWRL when your inference needs exceed what OWL axioms can express.
+  </Accordion>
+
+  <Accordion title="Triple">
+    A triple is the atomic unit of RDF data, composed of a subject, a predicate, and an object — together forming a single statement about the world. For example, `(:alice, :knows, :bob)` states that Alice knows Bob. Millions or billions of triples combine to form a knowledge graph.
+  </Accordion>
+
+  <Accordion title="Turtle">
+    Turtle (Terse RDF Triple Language) is a compact, human-readable serialization format for RDF. It supports `@prefix` declarations to abbreviate IRIs, and lets you group multiple predicates and objects for the same subject, keeping files concise. Turtle is the recommended format for hand-authoring ontologies and small datasets in the Knowledge Hub.
+  </Accordion>
+
+  <Accordion title="URI">
+    A URI (Uniform Resource Identifier) is the original W3C standard for naming resources on the web, restricted to ASCII characters. In RDF, URIs are used as identifiers for subjects, predicates, and objects. IRI is the broader, Unicode-aware successor, but the terms are often used interchangeably in practice.
+  </Accordion>
+
+</AccordionGroup>
+
+<Note>
+  Don't see a term you need? Submit a glossary request through the **Community** tab in the Knowledge Hub dashboard and the ANC Lab team will review it for inclusion.
+</Note>

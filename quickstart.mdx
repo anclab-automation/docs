@@ -1,47 +1,321 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with ANC Lab Knowledge Hub"
+sidebarTitle: "Quickstart"
+description: "Create an account, get your API key, build your first ontology and knowledge graph, and run a SPARQL query in under 15 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you through the essential workflow of ANC Lab Knowledge Hub from start to finish. By the end, you will have created an ontology, added entities and relationships to a knowledge graph, executed a SPARQL query, and viewed analytics results — all through the REST API.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+<Info>
+  All API requests require an `Authorization` header with your API key. Keys have the format `anchub_sk_...` and are generated in the dashboard under **Settings → API Keys**.
+</Info>
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+
+  <Step title="Create an Account and Get an API Key">
+    Sign up at [anclab.io](https://anclab.io). Once logged in, navigate to **Settings → API Keys** and click **Generate New Key**. Copy the key immediately — it is only shown once.
+
+    Store your key as an environment variable so you can reuse it in all examples below:
 
     ```bash
-    npm install your-package
+    export ANCHUB_API_KEY="anchub_sk_your_key_here"
     ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+    Verify that your key works by calling the account endpoint:
 
-    ```bash
-    your-cli start
+    ```bash curl
+    curl https://api.anclab.io/v1/account \
+      -H "Authorization: Bearer $ANCHUB_API_KEY"
+    ```
+
+    ```python Python
+    import requests
+
+    API_KEY = "anchub_sk_your_key_here"
+    BASE_URL = "https://api.anclab.io/v1"
+    HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+    response = requests.get(f"{BASE_URL}/account", headers=HEADERS)
+    print(response.json())
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "id": "acct_01hx3f9kqp",
+      "email": "you@yourorg.com",
+      "plan": "starter",
+      "created_at": "2024-09-12T08:30:00Z"
+    }
     ```
   </Step>
+
+  <Step title="Create an Ontology">
+    An ontology defines the classes, properties, and constraints for your domain. Create one by posting a name and optional description to the `/ontologies` endpoint.
+
+    ```bash curl
+    curl -X POST https://api.anclab.io/v1/ontologies \
+      -H "Authorization: Bearer $ANCHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "research-domain",
+        "label": "Research Domain Ontology",
+        "description": "Classes and properties for academic research entities",
+        "namespace": "https://ontology.anclab.io/research#"
+      }'
+    ```
+
+    ```python Python
+    payload = {
+        "name": "research-domain",
+        "label": "Research Domain Ontology",
+        "description": "Classes and properties for academic research entities",
+        "namespace": "https://ontology.anclab.io/research#"
+    }
+
+    response = requests.post(f"{BASE_URL}/ontologies", headers=HEADERS, json=payload)
+    ontology = response.json()
+    ontology_id = ontology["id"]
+    print(f"Created ontology: {ontology_id}")
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "id": "ont_02jy7mzqrs",
+      "name": "research-domain",
+      "label": "Research Domain Ontology",
+      "namespace": "https://ontology.anclab.io/research#",
+      "status": "active",
+      "created_at": "2024-09-12T08:35:00Z"
+    }
+    ```
+
+    Next, add a class to your ontology — for example, a `Researcher` class:
+
+    ```bash curl
+    curl -X POST https://api.anclab.io/v1/ontologies/ont_02jy7mzqrs/classes \
+      -H "Authorization: Bearer $ANCHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "uri": "https://ontology.anclab.io/research#Researcher",
+        "label": "Researcher",
+        "comment": "A person conducting academic or scientific research"
+      }'
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "uri": "https://ontology.anclab.io/research#Researcher",
+      "label": "Researcher",
+      "comment": "A person conducting academic or scientific research",
+      "ontology_id": "ont_02jy7mzqrs"
+    }
+    ```
+  </Step>
+
+  <Step title="Add Entities and Relationships">
+    With your ontology in place, create a knowledge graph and populate it with entities (individuals) and relationships (triples).
+
+    First, create a graph that references your ontology:
+
+    ```bash curl
+    curl -X POST https://api.anclab.io/v1/graphs \
+      -H "Authorization: Bearer $ANCHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "research-graph",
+        "label": "Research Knowledge Graph",
+        "ontology_id": "ont_02jy7mzqrs"
+      }'
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "id": "grph_03kz8nartu",
+      "name": "research-graph",
+      "ontology_id": "ont_02jy7mzqrs",
+      "triple_count": 0,
+      "created_at": "2024-09-12T08:40:00Z"
+    }
+    ```
+
+    Now add entities and a relationship between them as RDF triples:
+
+    ```bash curl
+    curl -X POST https://api.anclab.io/v1/graphs/grph_03kz8nartu/triples \
+      -H "Authorization: Bearer $ANCHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "triples": [
+          {
+            "subject": "https://data.anclab.io/research/person/alice-chen",
+            "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+            "object": "https://ontology.anclab.io/research#Researcher"
+          },
+          {
+            "subject": "https://data.anclab.io/research/person/alice-chen",
+            "predicate": "http://xmlns.com/foaf/0.1/name",
+            "object": "Alice Chen"
+          },
+          {
+            "subject": "https://data.anclab.io/research/paper/kg-survey-2024",
+            "predicate": "https://ontology.anclab.io/research#authoredBy",
+            "object": "https://data.anclab.io/research/person/alice-chen"
+          }
+        ]
+      }'
+    ```
+
+    ```python Python
+    triples_payload = {
+        "triples": [
+            {
+                "subject": "https://data.anclab.io/research/person/alice-chen",
+                "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                "object": "https://ontology.anclab.io/research#Researcher"
+            },
+            {
+                "subject": "https://data.anclab.io/research/person/alice-chen",
+                "predicate": "http://xmlns.com/foaf/0.1/name",
+                "object": "Alice Chen"
+            },
+            {
+                "subject": "https://data.anclab.io/research/paper/kg-survey-2024",
+                "predicate": "https://ontology.anclab.io/research#authoredBy",
+                "object": "https://data.anclab.io/research/person/alice-chen"
+            }
+        ]
+    }
+
+    graph_id = "grph_03kz8nartu"
+    response = requests.post(
+        f"{BASE_URL}/graphs/{graph_id}/triples",
+        headers=HEADERS,
+        json=triples_payload
+    )
+    print(response.json())
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "inserted": 3,
+      "graph_id": "grph_03kz8nartu",
+      "triple_count": 3
+    }
+    ```
+  </Step>
+
+  <Step title="Run a SPARQL Query">
+    Use the `/graphs/{id}/sparql` endpoint to query your graph. The following query retrieves all researchers and the papers they authored:
+
+    ```bash curl
+    curl -X POST https://api.anclab.io/v1/graphs/grph_03kz8nartu/sparql \
+      -H "Authorization: Bearer $ANCHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "query": "PREFIX res: <https://ontology.anclab.io/research#> PREFIX foaf: <http://xmlns.com/foaf/0.1/> SELECT ?name ?paper WHERE { ?person a res:Researcher ; foaf:name ?name . ?paper res:authoredBy ?person . }"
+      }'
+    ```
+
+    ```python Python
+    sparql_query = """
+    PREFIX res: <https://ontology.anclab.io/research#>
+    PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+    SELECT ?name ?paper
+    WHERE {
+      ?person a res:Researcher ;
+              foaf:name ?name .
+      ?paper res:authoredBy ?person .
+    }
+    """
+
+    response = requests.post(
+        f"{BASE_URL}/graphs/{graph_id}/sparql",
+        headers=HEADERS,
+        json={"query": sparql_query}
+    )
+    print(response.json())
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "results": {
+        "bindings": [
+          {
+            "name": { "type": "literal", "value": "Alice Chen" },
+            "paper": { "type": "uri", "value": "https://data.anclab.io/research/paper/kg-survey-2024" }
+          }
+        ]
+      },
+      "execution_ms": 12
+    }
+    ```
+
+    <Tip>
+      Enable inferencing by adding `"infer": true` to your SPARQL request body. The reasoner will apply your OWL axioms and SHACL rules before executing the query, surfacing relationships that are implied but not explicitly stored.
+    </Tip>
+  </Step>
+
+  <Step title="View Analytics Results">
+    Retrieve graph-level analytics to understand the shape and health of your knowledge graph:
+
+    ```bash curl
+    curl https://api.anclab.io/v1/graphs/grph_03kz8nartu/analytics \
+      -H "Authorization: Bearer $ANCHUB_API_KEY"
+    ```
+
+    ```python Python
+    response = requests.get(
+        f"{BASE_URL}/graphs/{graph_id}/analytics",
+        headers=HEADERS
+    )
+    print(response.json())
+    ```
+
+    **Expected response:**
+
+    ```json
+    {
+      "graph_id": "grph_03kz8nartu",
+      "triple_count": 3,
+      "entity_count": 2,
+      "class_distribution": {
+        "https://ontology.anclab.io/research#Researcher": 1
+      },
+      "avg_degree": 1.5,
+      "density": 0.75,
+      "top_predicates": [
+        { "predicate": "https://ontology.anclab.io/research#authoredBy", "count": 1 }
+      ]
+    }
+    ```
+
+    Open the **Analytics** tab in the dashboard to explore interactive visualizations, including node-link diagrams, degree distributions, and property usage charts.
+  </Step>
+
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Next Steps
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+You've built a working knowledge graph end to end. From here you can:
+
+<CardGroup cols={2}>
+  <Card title="Explore Core Concepts" icon="shapes" href="/concepts/overview">
+    Deepen your understanding of ontologies, knowledge graphs, semantics, and analytics.
+  </Card>
+  <Card title="Browse the API Reference" icon="code" href="/api/introduction">
+    See every available endpoint, parameter, and response schema in the full API reference.
+  </Card>
+</CardGroup>
