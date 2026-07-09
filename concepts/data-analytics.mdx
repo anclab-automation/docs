@@ -1,5 +1,5 @@
 ---
-title: "Graph Analytics: Insights from Connected Data"
+title: "Graph Analytics: Unlocking Insights from Connected Data"
 sidebarTitle: "Data Analytics"
 description: "Discover how graph analytics unlocks insights unavailable in traditional BI — from centrality and path finding to ontology-enriched SPARQL aggregations."
 ---
@@ -49,12 +49,14 @@ Traditional business intelligence works by aggregating values in rows and column
     PREFIX :  <https://data.anclab.io/kg#>
     PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-    # Degree centrality: count outgoing relationships per Person
-    SELECT ?person ?name (COUNT(?rel) AS ?degree)
+    # Degree centrality: count distinct connected entities per Person
+    SELECT ?person ?name (COUNT(DISTINCT ?target) AS ?degree)
     WHERE {
       ?person  a foaf:Person ;
-               foaf:name  ?name ;
-               ?rel        ?target .
+               foaf:name  ?name .
+      { ?person  ?p  ?target . FILTER (isIRI(?target)) }
+      UNION
+      { ?target  ?p  ?person . FILTER (isIRI(?target)) }
     }
     GROUP BY ?person ?name
     ORDER BY DESC(?degree)
@@ -214,22 +216,22 @@ ORDER BY DESC(?avgSupplyChainDepth)
 ## Common Analytics Use Cases
 
 <CardGroup cols={3}>
-  <Card title="Customer 360°" icon="user-circle">
+  <Card title="Customer 360°" icon="user-circle" href="/guides/data-analytics-workflows">
     Aggregate purchases, interactions, preferences, and segment memberships across all touchpoints. Ontology hierarchies ensure product category roll-ups are always consistent.
   </Card>
-  <Card title="Risk & Compliance" icon="shield-halved">
+  <Card title="Risk & Compliance" icon="shield-halved" href="/query/graph-traversal">
     Score entities by network centrality in transaction graphs. Flag clusters that match known fraud patterns using subgraph detection.
   </Card>
-  <Card title="Supply Chain Resilience" icon="truck">
+  <Card title="Supply Chain Resilience" icon="truck" href="/query/graph-traversal">
     Identify single-source dependencies through reachability analysis. Simulate the impact of removing a supplier node before disruptions occur.
   </Card>
-  <Card title="Research Discovery" icon="microscope">
+  <Card title="Research Discovery" icon="microscope" href="/guides/semantic-querying">
     Find co-authorship clusters, citation paths, and topic communities in biomedical or academic graphs. Semantic class queries surface related research automatically.
   </Card>
-  <Card title="IT & Security Operations" icon="server">
+  <Card title="IT & Security Operations" icon="server" href="/query/sparql-basics">
     Map infrastructure assets, dependencies, and vulnerabilities as a graph. Shortest-path queries reveal blast radius when a component is compromised.
   </Card>
-  <Card title="Content Recommendation" icon="rectangle-list">
+  <Card title="Content Recommendation" icon="rectangle-list" href="/concepts/semantics">
     Build topic graphs over content corpora. Walk the graph from a user's history to semantically adjacent articles, products, or courses.
   </Card>
 </CardGroup>

@@ -1,7 +1,7 @@
 ---
-title: "Get Started with ANC Lab Knowledge Hub"
+title: "ANC Lab Knowledge Hub Quickstart: From Zero to SPARQL"
 sidebarTitle: "Quickstart"
-description: "Create an account, get your API key, build your first ontology and knowledge graph, and run a SPARQL query in under 15 minutes."
+description: "Build your first ontology, populate a knowledge graph, and run your first SPARQL query — all through the REST API in under 15 minutes."
 ---
 
 This guide walks you through the essential workflow of ANC Lab Knowledge Hub from start to finish. By the end, you will have created an ontology, added entities and relationships to a knowledge graph, executed a SPARQL query, and viewed analytics results — all through the REST API.
@@ -21,10 +21,10 @@ This guide walks you through the essential workflow of ANC Lab Knowledge Hub fro
     export ANCHUB_API_KEY="anchub_sk_your_key_here"
     ```
 
-    Verify that your key works by calling the account endpoint:
+    Verify that your key works by listing your ontologies — an empty array is expected for a new account:
 
     ```bash curl
-    curl https://api.anclab.io/v1/account \
+    curl https://api.anclab.io/v1/ontologies \
       -H "Authorization: Bearer $ANCHUB_API_KEY"
     ```
 
@@ -35,7 +35,7 @@ This guide walks you through the essential workflow of ANC Lab Knowledge Hub fro
     BASE_URL = "https://api.anclab.io/v1"
     HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
-    response = requests.get(f"{BASE_URL}/account", headers=HEADERS)
+    response = requests.get(f"{BASE_URL}/ontologies", headers=HEADERS)
     print(response.json())
     ```
 
@@ -43,10 +43,8 @@ This guide walks you through the essential workflow of ANC Lab Knowledge Hub fro
 
     ```json
     {
-      "id": "acct_01hx3f9kqp",
-      "email": "you@yourorg.com",
-      "plan": "starter",
-      "created_at": "2024-09-12T08:30:00Z"
+      "ontologies": [],
+      "total": 0
     }
     ```
   </Step>
@@ -215,13 +213,14 @@ This guide walks you through the essential workflow of ANC Lab Knowledge Hub fro
   </Step>
 
   <Step title="Run a SPARQL Query">
-    Use the `/graphs/{id}/sparql` endpoint to query your graph. The following query retrieves all researchers and the papers they authored:
+    Use the `POST /query` endpoint to run a SPARQL query against your graph. Pass the graph ID in the request body alongside your query. The following query retrieves all researchers and the papers they authored:
 
     ```bash curl
-    curl -X POST https://api.anclab.io/v1/graphs/grph_03kz8nartu/sparql \
+    curl -X POST https://api.anclab.io/v1/query \
       -H "Authorization: Bearer $ANCHUB_API_KEY" \
       -H "Content-Type: application/json" \
       -d '{
+        "graph_id": "grph_03kz8nartu",
         "query": "PREFIX res: <https://ontology.anclab.io/research#> PREFIX foaf: <http://xmlns.com/foaf/0.1/> SELECT ?name ?paper WHERE { ?person a res:Researcher ; foaf:name ?name . ?paper res:authoredBy ?person . }"
       }'
     ```
@@ -240,9 +239,9 @@ This guide walks you through the essential workflow of ANC Lab Knowledge Hub fro
     """
 
     response = requests.post(
-        f"{BASE_URL}/graphs/{graph_id}/sparql",
+        f"{BASE_URL}/query",
         headers=HEADERS,
-        json={"query": sparql_query}
+        json={"graph_id": graph_id, "query": sparql_query}
     )
     print(response.json())
     ```
@@ -269,17 +268,18 @@ This guide walks you through the essential workflow of ANC Lab Knowledge Hub fro
   </Step>
 
   <Step title="View Analytics Results">
-    Retrieve graph-level analytics to understand the shape and health of your knowledge graph:
+    Retrieve graph-level analytics to understand the shape and health of your knowledge graph using the `GET /analytics` endpoint. Pass your graph ID as a query parameter:
 
     ```bash curl
-    curl https://api.anclab.io/v1/graphs/grph_03kz8nartu/analytics \
+    curl "https://api.anclab.io/v1/analytics?graph_id=grph_03kz8nartu" \
       -H "Authorization: Bearer $ANCHUB_API_KEY"
     ```
 
     ```python Python
     response = requests.get(
-        f"{BASE_URL}/graphs/{graph_id}/analytics",
-        headers=HEADERS
+        f"{BASE_URL}/analytics",
+        headers=HEADERS,
+        params={"graph_id": graph_id}
     )
     print(response.json())
     ```

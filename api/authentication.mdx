@@ -1,7 +1,7 @@
 ---
-title: "Authenticate API Requests with API Keys"
+title: "API Authentication: Create and Manage ANC Lab API Keys"
 sidebarTitle: "Authentication"
-description: "Learn how to create, scope, and revoke ANC Lab API keys, and include them correctly in every REST API request you make."
+description: "Learn how to create, scope, and revoke ANC Lab API keys, and ensure they are included correctly in every REST API request you make."
 ---
 
 Every request to the ANC Lab REST API must be authenticated with an API key. Keys are long-lived bearer tokens that you generate from the ANC Lab dashboard or programmatically via the `/auth/keys` endpoint. Each key carries one or more **scopes** that determine which operations it may perform, so you can issue tightly scoped keys for individual services or CI pipelines without granting unnecessary access.

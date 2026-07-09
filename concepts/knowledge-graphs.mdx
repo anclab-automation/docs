@@ -1,5 +1,5 @@
 ---
-title: "Knowledge Graphs: Structure, Nodes, and Edges"
+title: "Knowledge Graphs: Structure, Nodes, Edges, and Triples"
 sidebarTitle: "Knowledge Graphs"
 description: "Understand how knowledge graphs represent entities and relationships as triples, how RDF underpins the data model, and where knowledge graphs are applied."
 ---
@@ -11,10 +11,10 @@ A knowledge graph is a network of real-world entities — people, places, produc
 It helps to think of a knowledge graph as having two distinct but inseparable layers:
 
 <CardGroup cols={2}>
-  <Card title="Ontology Layer (Schema)" icon="sitemap">
+  <Card title="Ontology Layer (Schema)" icon="sitemap" href="/concepts/ontology">
     Defines **classes**, **properties**, and **axioms**. This is the blueprint — it says that a `Person` can `worksFor` an `Organisation`, and that an `Organisation` must have exactly one `legalName`.
   </Card>
-  <Card title="Graph Layer (Data)" icon="database">
+  <Card title="Graph Layer (Data)" icon="database" href="/guides/constructing-knowledge-graphs">
     Contains the **individuals** and **triples** that conform to the ontology. This is the populated graph — it says that *Alice* `worksFor` *ANC Lab* and *ANC Lab* has `legalName` "ANC Lab Ltd".
   </Card>
 </CardGroup>
@@ -50,6 +50,9 @@ A **relationship** (object property triple) connects two entities. Relationships
 A **named graph** is a set of triples bundled under a fourth URI — the graph name. Named graphs let you track provenance (where did these triples come from?), manage access control at a graph level, and record metadata such as ingestion timestamps.
 
 ```turtle
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix :     <https://data.anclab.io/kg#> .
+
 # A named graph with provenance metadata
 GRAPH <https://data.anclab.io/graph/hr-2024> {
   :Alice  :worksFor   :ANCLab ;
@@ -129,22 +132,22 @@ The Turtle serialisation below shows a compact, human-readable RDF knowledge gra
 ## Common Use Cases
 
 <CardGroup cols={2}>
-  <Card title="Enterprise Knowledge Graphs" icon="building">
+  <Card title="Enterprise Knowledge Graphs" icon="building" href="/guides/constructing-knowledge-graphs">
     Unify siloed data from ERP, CRM, HR, and document systems into a single queryable graph. Enable 360° views of customers, products, and processes without rewriting source systems.
   </Card>
-  <Card title="Biomedical Research" icon="flask">
+  <Card title="Biomedical Research" icon="flask" href="/guides/integrating-external-data">
     Link genes, proteins, diseases, drugs, and clinical trials. Accelerate drug discovery by surfacing non-obvious connections across millions of published findings.
   </Card>
-  <Card title="Supply Chain & Logistics" icon="truck">
+  <Card title="Supply Chain & Logistics" icon="truck" href="/query/graph-traversal">
     Model suppliers, components, locations, and certifications as a graph. Identify single-points-of-failure and simulate disruption scenarios with graph traversal queries.
   </Card>
-  <Card title="Financial Services" icon="landmark">
+  <Card title="Financial Services" icon="landmark" href="/query/sparql-basics">
     Represent entities, ownership structures, transactions, and regulatory relationships. Detect fraud rings and assess counterparty risk through graph pattern matching.
   </Card>
-  <Card title="Smart Search & Recommendations" icon="magnifying-glass">
+  <Card title="Smart Search & Recommendations" icon="magnifying-glass" href="/concepts/semantics">
     Connect content, topics, users, and interactions. Generate recommendations by walking the graph from a user's interests to semantically related items.
   </Card>
-  <Card title="Regulatory Compliance" icon="shield-halved">
+  <Card title="Regulatory Compliance" icon="shield-halved" href="/guides/data-analytics-workflows">
     Map obligations, controls, assets, and evidence. Answer audit queries like "which controls cover this regulation?" with a single SPARQL query over a compliance graph.
   </Card>
 </CardGroup>

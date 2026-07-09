@@ -1,7 +1,7 @@
 ---
-title: "Analytics API: Graph Metrics and Insights"
+title: "Analytics API: Compute Graph Metrics and Schedule Reports"
 sidebarTitle: "Analytics"
-description: "Compute graph metrics, run custom SPARQL aggregations, and schedule recurring analytics reports on your ANC Lab knowledge graphs."
+description: "Compute built-in graph metrics, run custom SPARQL aggregations, and schedule recurring analytics reports on your ANC Lab knowledge graphs."
 ---
 
 The Analytics API gives you prebuilt graph metrics — entity distribution, relationship density, centrality, path analysis, and cluster detection — alongside a flexible endpoint for custom SPARQL aggregation queries. Run analyses on demand or schedule recurring reports to be delivered via webhook, so you always have fresh insight into the structure and health of your knowledge graphs.
@@ -35,8 +35,12 @@ Executes a built-in analytics metric against a knowledge graph and returns struc
   Filter the metric to entities of a specific class IRI. For example, pass `https://schema.org/Product` to compute centrality only over product entities.
 </ParamField>
 
+<ParamField query="page" type="integer">
+  Page number for paginated results (1-indexed). Defaults to `1`. Use with `limit` to page through large result sets such as those produced by `cluster_detection` on large graphs.
+</ParamField>
+
 <ParamField query="limit" type="integer">
-  Maximum number of result rows to return. Defaults to `100`, maximum `1000`.
+  Maximum number of result rows to return per page. Defaults to `100`, maximum `1000`.
 </ParamField>
 
 <Tip>

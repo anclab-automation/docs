@@ -1,10 +1,10 @@
 ---
-title: "Integrate External Data Sources and Linked Data"
+title: "Integrate External Data and Linked Data into Your Graph"
 sidebarTitle: "Integrate Data"
-description: "Pull in external RDF datasets, federate SPARQL endpoints, link entities with owl:sameAs, and map CSV/JSON to RDF using the ANC Lab Knowledge Hub integration tools."
+description: "Import RDF dumps, federate remote SPARQL endpoints, link entities with owl:sameAs, and convert CSV or JSON to RDF with ANC Lab Knowledge Hub."
 ---
 
-A knowledge graph's power grows significantly when you connect it to the wider web of linked data. ANC Lab Knowledge Hub provides four integration pathways: federating queries against remote SPARQL endpoints, importing RDF dumps from public datasets, linking your entities to external identifiers using `owl:sameAs`, and mapping structured tabular or JSON data to RDF through the built-in mapping tool. This guide walks through each method and shows you how to build a coherent external-data integration workflow.
+A knowledge graph's power grows significantly when you connect it to the wider web of linked data. ANC Lab Knowledge Hub provides four integration pathways: federating queries against remote SPARQL endpoints, importing RDF dumps from public datasets, linking your entities to external identifiers using `owl:sameAs`, and mapping structured tabular or JSON data to RDF through the built-in import endpoint. This guide walks through each method and shows you how to build a coherent external-data integration workflow.
 
 <Warning>
 Before importing any external dataset, verify its license. Common licenses impose restrictions that affect your usage:
@@ -18,20 +18,29 @@ When in doubt, isolate externally-sourced data in a dedicated named graph so you
 
 ## Importing from a Remote SPARQL Endpoint
 
-The platform can query a remote SPARQL endpoint and write the results directly into your graph. This is useful for pulling a specific slice of DBpedia, Wikidata, or your organisation's internal triple store.
+The platform can query a remote SPARQL endpoint and write the results directly into your graph. This is useful for pulling a specific slice of DBpedia, Wikidata, or any other publicly accessible SPARQL endpoint.
+
+The workflow is: run a `CONSTRUCT` query against the remote endpoint to produce an RDF result, save it as a Turtle file, then upload it to `POST /graphs/{id}/import`. The example below shows both steps.
 
 <CodeGroup>
 
 ```bash curl
-curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/integrations/federated-import \
+# Step 1: Fetch data from a remote SPARQL endpoint and save as Turtle
+curl -G "https://dbpedia.org/sparql" \
+  --data-urlencode "query=PREFIX dbo: <http://dbpedia.org/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+CONSTRUCT { ?company a dbo:Company ; rdfs:label ?label . }
+WHERE { ?company a dbo:Company ; rdfs:label ?label .
+        FILTER(LANG(?label) = \"en\") } LIMIT 500" \
+  -H "Accept: text/turtle" \
+  -o dbpedia-companies.ttl
+
+# Step 2: Import the Turtle file into your graph
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/import \
   -H "Authorization: Bearer anchub_sk_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "endpointUrl": "https://dbpedia.org/sparql",
-    "constructQuery": "PREFIX dbo: <http://dbpedia.org/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> CONSTRUCT { ?company a dbo:Company ; rdfs:label ?label . } WHERE { ?company a dbo:Company ; rdfs:label ?label . FILTER(LANG(?label) = \"en\") } LIMIT 500",
-    "targetNamedGraph": "https://data.anclab.io/ecommerce/imports/dbpedia-companies",
-    "timeout": 60
-  }'
+  -F "file=@dbpedia-companies.ttl;type=text/turtle" \
+  -F "namedGraph=https://data.anclab.io/ecommerce/imports/dbpedia-companies" \
+  -F "validate=false"
 ```
 
 ```python Python
@@ -44,6 +53,7 @@ HEADERS   = {
     "Content-Type": "application/json",
 }
 
+# Step 1: Fetch data from a remote SPARQL endpoint
 construct_query = """
 PREFIX dbo:  <http://dbpedia.org/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -60,26 +70,36 @@ WHERE {
 LIMIT 500
 """
 
-payload = {
-    "endpointUrl": "https://dbpedia.org/sparql",
-    "constructQuery": construct_query,
-    "targetNamedGraph": "https://data.anclab.io/ecommerce/imports/dbpedia-companies",
-    "timeout": 60,
-}
+remote_response = requests.get(
+    "https://dbpedia.org/sparql",
+    params={"query": construct_query},
+    headers={
+        "Accept": "text/turtle",
+        "User-Agent": "ANCLabKnowledgeHub/1.0",
+    },
+    timeout=60,
+)
+remote_response.raise_for_status()
+turtle_data = remote_response.content
 
+# Step 2: Import the fetched RDF into your graph
 r = requests.post(
-    f"{BASE_URL}/graphs/{GRAPH_ID}/integrations/federated-import",
-    json=payload,
-    headers=HEADERS,
+    f"{BASE_URL}/graphs/{GRAPH_ID}/import",
+    headers={"Authorization": "Bearer anchub_sk_..."},
+    files={"file": ("dbpedia-companies.ttl", turtle_data, "text/turtle")},
+    data={
+        "namedGraph": "https://data.anclab.io/ecommerce/imports/dbpedia-companies",
+        "validate": "false",
+    },
 )
 job = r.json()
-print(f"Federated import job: {job['jobId']}  status: {job['status']}")
+print(f"Import job: {job['jobId']}  status: {job['status']}")
 ```
 
 </CodeGroup>
 
 <Note>
-Federated SPARQL queries against public endpoints are subject to rate limits — DBpedia allows roughly 20 requests per minute per IP, and Wikidata's Query Service enforces a 60-second timeout and blocks clients that send more than 5 concurrent requests. The platform automatically spaces retries using exponential back-off, but if you need large volumes of data, prefer downloading an RDF dump (see the next section) rather than federating live queries.
+Remote SPARQL endpoints are subject to rate limits — DBpedia allows roughly 20 requests per minute per IP, and Wikidata's Query Service enforces a 60-second timeout and blocks clients that send more than 5 concurrent requests. If you need large volumes of data, download a full RDF dump (see the next section) instead of querying the live endpoint.
 </Note>
 
 Public linked data sources you can federate against or import from:
@@ -207,7 +227,29 @@ def find_wikidata_match(label: str) -> list[dict]:
 
 ### Assert owl:sameAs Links
 
-Post the confirmed `owl:sameAs` triples to your graph.
+Post the confirmed `owl:sameAs` triples to your graph using `POST /graphs/{id}/triples`.
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/triples \
+  -H "Authorization: Bearer anchub_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "triples": [
+      {
+        "subject":   "https://data.anclab.io/ecommerce/supplier/acme-corp",
+        "predicate": "http://www.w3.org/2002/07/owl#sameAs",
+        "object":    "http://www.wikidata.org/entity/Q12345678"
+      },
+      {
+        "subject":   "https://data.anclab.io/ecommerce/supplier/acme-corp",
+        "predicate": "http://www.w3.org/2002/07/owl#sameAs",
+        "object":    "http://dbpedia.org/resource/ACME_Corporation"
+      }
+    ]
+  }'
+```
 
 ```python Python
 same_as_triples = [
@@ -231,141 +273,119 @@ r = requests.post(
 print(f"Inserted {r.json()['inserted']} sameAs triple(s)")
 ```
 
+</CodeGroup>
+
 ### Trigger Entity Merging
 
 Ask the platform's reasoner to materialise inferred triples from `owl:sameAs` links so you can query both local and external properties transparently.
 
+<CodeGroup>
+
 ```bash curl
-curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/reason \
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/infer \
   -H "Authorization: Bearer anchub_sk_..." \
   -H "Content-Type: application/json" \
   -d '{ "rules": ["sameAs-propagation", "subClassOf"], "persist": true }'
 ```
 
+```python Python
+r = requests.post(
+    f"{BASE_URL}/graphs/{GRAPH_ID}/infer",
+    json={"rules": ["sameAs-propagation", "subClassOf"], "persist": True},
+    headers=HEADERS,
+)
+infer_result = r.json()
+print(f"Inference complete: {infer_result['triplesAdded']} new triples materialised")
+```
+
+</CodeGroup>
+
 </Steps>
 
 ## Mapping CSV / JSON to RDF
 
-Most real-world data arrives as CSV or JSON exports, not RDF. The platform's **Mapping Tool** lets you define a declarative mapping (using R2RML-inspired syntax) that transforms rows or JSON objects into triples.
+Most real-world data arrives as CSV or JSON exports, not RDF. The recommended approach is to convert your source data to JSON-LD client-side — mapping each row to your ontology's IRIs and datatypes — then upload the result directly to `POST /graphs/{id}/import`. This keeps the pipeline simple, auditable, and entirely within the public API.
 
-### Define a Mapping
+### Convert CSV Rows to JSON-LD
 
-Create a mapping configuration that describes how to turn each row of a product CSV into ontology-compliant triples.
+The following Python helper reads a product CSV and produces a JSON-LD document ready for import.
+
+```python Python
+import csv
+import json
+
+EC = "https://ontologies.anclab.io/ecommerce/v1#"
+DATA = "https://data.anclab.io/ecommerce/"
+
+def csv_to_jsonld(csv_path: str) -> dict:
+    """Convert a product CSV to a JSON-LD document."""
+    context = {
+        "ec":    EC,
+        "xsd":   "http://www.w3.org/2001/XMLSchema#",
+        "hasSKU":    {"@id": f"{EC}hasSKU",   "@type": "xsd:string"},
+        "hasName":   {"@id": f"{EC}hasName",  "@type": "xsd:string"},
+        "hasPrice":  {"@id": f"{EC}hasPrice", "@type": "xsd:decimal"},
+        "belongsTo": {"@id": f"{EC}belongsTo","@type": "@id"},
+    }
+
+    graph = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            graph.append({
+                "@id":   f"{DATA}product/{row['sku'].lower()}",
+                "@type": f"{EC}Product",
+                "hasSKU":    row["sku"],
+                "hasName":   row["name"],
+                "hasPrice":  row["price"],
+                "belongsTo": f"{DATA}category/{row['category_slug']}",
+            })
+
+    return {"@context": context, "@graph": graph}
+
+jsonld_doc = csv_to_jsonld("new-products.csv")
+with open("new-products.jsonld", "w") as f:
+    json.dump(jsonld_doc, f, indent=2)
+
+print(f"Converted {len(jsonld_doc['@graph'])} rows to JSON-LD")
+```
+
+### Import the JSON-LD into Your Graph
+
+Upload the converted file to `POST /graphs/{id}/import` with the appropriate named graph for provenance tracking.
 
 <CodeGroup>
 
 ```bash curl
-curl -X POST https://api.anclab.io/v1/mappings \
+curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/import \
   -H "Authorization: Bearer anchub_sk_..." \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "products-csv-to-rdf",
-    "sourceFormat": "csv",
-    "baseIri": "https://data.anclab.io/ecommerce/product/",
-    "subjectTemplate": "{sku}",
-    "predicateMappings": [
-      { "column": "sku",           "predicate": "https://ontologies.anclab.io/ecommerce/v1#hasSKU",   "datatype": "xsd:string" },
-      { "column": "name",          "predicate": "https://ontologies.anclab.io/ecommerce/v1#hasName",  "datatype": "xsd:string" },
-      { "column": "price",         "predicate": "https://ontologies.anclab.io/ecommerce/v1#hasPrice", "datatype": "xsd:decimal" },
-      { "column": "category_slug", "predicate": "https://ontologies.anclab.io/ecommerce/v1#belongsTo",
-        "objectTemplate": "https://data.anclab.io/ecommerce/category/{category_slug}", "objectType": "iri" }
-    ],
-    "typeIri": "https://ontologies.anclab.io/ecommerce/v1#Product"
-  }'
+  -F "file=@new-products.jsonld;type=application/ld+json" \
+  -F "namedGraph=https://data.anclab.io/ecommerce/imports/csv-batch-2024-11" \
+  -F "validate=true"
 ```
 
 ```python Python
-mapping_config = {
-    "name": "products-csv-to-rdf",
-    "sourceFormat": "csv",
-    "baseIri": "https://data.anclab.io/ecommerce/product/",
-    "subjectTemplate": "{sku}",
-    "predicateMappings": [
-        {
-            "column": "sku",
-            "predicate": "https://ontologies.anclab.io/ecommerce/v1#hasSKU",
-            "datatype": "xsd:string",
+with open("new-products.jsonld", "rb") as f:
+    r = requests.post(
+        f"{BASE_URL}/graphs/{GRAPH_ID}/import",
+        headers={"Authorization": "Bearer anchub_sk_..."},
+        files={"file": ("new-products.jsonld", f, "application/ld+json")},
+        data={
+            "namedGraph": "https://data.anclab.io/ecommerce/imports/csv-batch-2024-11",
+            "validate": "true",
         },
-        {
-            "column": "name",
-            "predicate": "https://ontologies.anclab.io/ecommerce/v1#hasName",
-            "datatype": "xsd:string",
-        },
-        {
-            "column": "price",
-            "predicate": "https://ontologies.anclab.io/ecommerce/v1#hasPrice",
-            "datatype": "xsd:decimal",
-        },
-        {
-            "column": "category_slug",
-            "predicate": "https://ontologies.anclab.io/ecommerce/v1#belongsTo",
-            "objectTemplate": "https://data.anclab.io/ecommerce/category/{category_slug}",
-            "objectType": "iri",
-        },
-    ],
-    "typeIri": "https://ontologies.anclab.io/ecommerce/v1#Product",
-}
+    )
 
-r = requests.post(f"{BASE_URL}/mappings", json=mapping_config, headers=HEADERS)
-mapping_id = r.json()["id"]
-print(f"Created mapping: {mapping_id}")
+job = r.json()
+print(f"Import job: {job['jobId']}  status: {job['status']}")
 ```
 
 </CodeGroup>
 
-### Apply the Mapping to a File
+The platform validates each generated triple against your SHACL shapes before committing. Rows that violate constraints are reported in the `rejectedRows` field of the completed job response.
 
-Upload a CSV file and apply your saved mapping to convert it into RDF triples loaded directly into your graph.
-
-<CodeGroup>
-
-```bash curl
-curl -X POST https://api.anclab.io/v1/graphs/grph_3mNpQrStuv/integrations/mapping-import \
-  -H "Authorization: Bearer anchub_sk_..." \
-  -F "file=@new-products.csv;type=text/csv" \
-  -F "mappingId=map_Xyz9AbCd" \
-  -F "namedGraph=https://data.anclab.io/ecommerce/imports/csv-batch-2024-11"
-```
-
-```python Python
-def apply_mapping(csv_path: str, mapping_id: str, named_graph: str) -> dict:
-    with open(csv_path, "rb") as f:
-        r = requests.post(
-            f"{BASE_URL}/graphs/{GRAPH_ID}/integrations/mapping-import",
-            headers={"Authorization": "Bearer anchub_sk_..."},
-            files={"file": (csv_path, f, "text/csv")},
-            data={
-                "mappingId": mapping_id,
-                "namedGraph": named_graph,
-            },
-        )
-    r.raise_for_status()
-    return r.json()
-
-job = apply_mapping(
-    "new-products.csv",
-    mapping_id,
-    "https://data.anclab.io/ecommerce/imports/csv-batch-2024-11",
-)
-print(f"Mapping import job: {job['jobId']}")
-```
-
-</CodeGroup>
-
-The platform validates each generated triple against your SHACL shapes before committing. Rows that violate constraints are written to a `rejectedRows` report in the job response.
-
-### Preview Before Committing
-
-Test your mapping on the first 20 rows without writing to the graph by using the `preview` endpoint:
-
-```bash curl
-curl -X POST https://api.anclab.io/v1/mappings/map_Xyz9AbCd/preview \
-  -H "Authorization: Bearer anchub_sk_..." \
-  -F "file=@new-products.csv;type=text/csv" \
-  -F "limit=20"
-```
-
-The response returns the first 20 generated triples as a Turtle snippet so you can verify the mapping is correct before a full import.
+<Tip>
+To preview your conversion before importing, simply inspect the generated JSON-LD file locally before uploading. Check that each `@id` IRI resolves correctly, `@type` matches your ontology class, and all required properties are present. Fix any issues in your conversion script, then re-run the import.
+</Tip>
 
 ## Verifying Your Integrations
 
